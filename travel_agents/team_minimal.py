@@ -91,6 +91,29 @@ def extract_trip_details(prompt: str):
 # Plan trip logic with agents
 # ---------------------------
 
+def find_city_code(country: str) -> str:
+    # A mock function to map countries to city codes.
+    # You can extend this with more countries and their codes.
+    
+    country_mapping = {
+        "Sri Lanka": "CMB",  # Colombo, Sri Lanka
+        "Mexico": "MEX",     # Mexico City
+        "India": "DEL",      # Delhi, India
+        "USA": "NYC",        # New York, USA
+        "Japan": "HND",      # Tokyo, Japan
+        "Australia": "SYD",  # Sydney, Australia
+    }
+
+    # If the country is not in the mapping, use OpenCage to get the country code
+    if country not in country_mapping:
+        # If not found in the mapping, use the OpenCage API to get the city code
+        country_code = get_geolocation(country)  # Removed `await` since `get_geolocation` is synchronous
+        if country_code[0]:  # If a valid country is returned
+            return country_code[0]  # Return the first result from OpenCage API
+
+    # Default to Mexico City (MEX) if the country is not in the mapping or OpenCage fails
+    return country_mapping.get(country, "MEX")
+
 async def plan_trip(user_prompt: str):
     missing = []
     country, start_date, num_days = extract_trip_details(user_prompt)
@@ -106,7 +129,7 @@ async def plan_trip(user_prompt: str):
     end_date = (date.fromisoformat(start_date) + timedelta(days=num_days)).isoformat()
 
     # Get the city code for the country
-    city_code = await find_city_code(country)  # Example: convert 'Sri Lanka' to 'CMB'
+    city_code = find_city_code(country)  # Example: convert 'Sri Lanka' to 'CMB'
 
     origin_iata = "DEL"  # Default origin (India)
 
