@@ -1,9 +1,10 @@
-pydantic==2.8.2
+pydantic>=2.10.0
 python-dotenv==1.0.1
 httpx==0.27.2
 rich==13.7.1
 # AutoGen (agent framework) + Gemini OpenAI-compatible client
-autogen-agentchat==0.4.0
-autogen-ext==0.2.2
+autogen-core==0.7.4
+autogen-ext==0.7.4
+autogen-agentchat==0.7.4
 # If autogen-ext pulls tiktoken, we include it explicitly to avoid import errors
 tiktoken==0.7.0
