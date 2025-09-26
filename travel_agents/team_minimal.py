@@ -24,8 +24,30 @@ from agents.accommodation_agent import get_hotel_options  # Accommodation agent
 
 # Load API key
 load_dotenv()
+
+# Try to load from multiple possible locations
+env_paths = [
+    os.path.join(os.path.dirname(__file__), '.env'),
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
+    os.path.join(os.path.dirname(__file__), 'env_example.txt')
+]
+
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"📁 Loaded environment from: {env_path}")
+        break
+
 api_key = os.getenv("GEMINI_API_KEY")
 GEOCODE_API_KEY = os.getenv("GEOCODE_API_KEY")  # Your OpenCage Geocoder API key
+
+# Debug: Print loaded environment variables (without values for security)
+print(f"🔧 Environment check:")
+print(f"   GEMINI_API_KEY: {'✅ Set' if api_key else '❌ Missing'}")
+print(f"   GEOCODE_API_KEY: {'✅ Set' if GEOCODE_API_KEY else '❌ Missing'}")
+print(f"   AMADEUS_CLIENT_ID: {'✅ Set' if os.getenv('AMADEUS_CLIENT_ID') else '❌ Missing'}")
+print(f"   AMADEUS_CLIENT_SECRET: {'✅ Set' if os.getenv('AMADEUS_CLIENT_SECRET') else '❌ Missing'}")
+print(f"   DUFFEL_ACCESS_TOKEN: {'✅ Set' if os.getenv('DUFFEL_ACCESS_TOKEN') else '❌ Missing'}")
 
 # ---------------------------
 # Tool wrappers for AutoGen
@@ -79,12 +101,43 @@ def get_geolocation(country_or_city: str) -> tuple:
     return None, None
 
 def extract_trip_details(prompt: str):
-    # Extracts country or city from the user prompt
-    country_or_city_match = re.search(r"([A-Za-z\s]+)", prompt)  # Simple regex to capture country/city
-    country_or_city = country_or_city_match.group(1) if country_or_city_match else "Sri Lanka"
+    """Extract trip details from user prompt with improved regex patterns"""
+    # Improved regex patterns for better country/city detection
+    country_patterns = [
+        r"(?:visit|go to|travel to|trip to|book|plan)\s+([A-Za-z\s]+?)(?:\s+for|\s+starting|\s+from|\s+in|\s+on|\s+with|\s+under|\s+$)",
+        r"(?:to|in)\s+([A-Za-z\s]+?)(?:\s+for|\s+starting|\s+from|\s+in|\s+on|\s+with|\s+under|\s+$)",
+        r"([A-Za-z\s]+?)(?:\s+for\s+\d+\s+days|\s+starting|\s+from|\s+in|\s+on|\s+with|\s+under)",
+        r"([A-Za-z\s]+?)(?:\s+trip|\s+vacation|\s+holiday)",
+    ]
+    
+    country_or_city = None
+    for pattern in country_patterns:
+        match = re.search(pattern, prompt, re.IGNORECASE)
+        if match:
+            country_or_city = match.group(1).strip()
+            # Clean up common words
+            country_or_city = re.sub(r'\b(to|for|a|an|the|trip|vacation|holiday|visit|go|travel|book|plan)\b', '', country_or_city, flags=re.IGNORECASE).strip()
+            if country_or_city:
+                break
+    
+    # Fallback: try to extract any capitalized words
+    if not country_or_city:
+        words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', prompt)
+        if words:
+            country_or_city = words[0]
+    
+    # Final fallback
+    if not country_or_city:
+        country_or_city = "Sri Lanka"  # Default fallback
+    
+    print(f"🔍 Extracted location: '{country_or_city}' from prompt: '{prompt}'")
 
     # Call geocoding API to get the country and city
     country, city = get_geolocation(country_or_city)
+    
+    # If geocoding fails, use the extracted text as country
+    if not country:
+        country = country_or_city
 
     # Extract the number of days
     days_match = re.search(r"(\d+)\s*days?", prompt, re.IGNORECASE)
@@ -290,11 +343,11 @@ async def plan_trip(user_prompt: str):
         # Create proper TripQuery object
         trip_query = TripQuery(
             origin=origin_iata,
-            destination=country,
+            destination=country or "Unknown Destination",
             start_date=start_date,
             end_date=end_date,
             adults=1,
-            notes=f"Trip to {country}"
+            notes=f"Trip to {country or 'Unknown Destination'}"
         )
         
         return PlanResponse(query=trip_query, packages=packages, missing=missing)
