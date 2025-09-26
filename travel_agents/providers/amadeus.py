@@ -5,9 +5,18 @@ from datetime import date, timedelta
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 AMADEUS_BASE = "https://test.api.amadeus.com"
 CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET")
+
+# Debug: Print loaded credentials (without values for security)
+print(f"🔧 Amadeus Provider - Environment check:")
+print(f"   AMADEUS_CLIENT_ID: {'✅ Set' if CLIENT_ID else '❌ Missing'}")
+print(f"   AMADEUS_CLIENT_SECRET: {'✅ Set' if CLIENT_SECRET else '❌ Missing'}")
 
 async def _get_token() -> str:
     """Get Amadeus API token with error handling"""

@@ -59,45 +59,10 @@ async def get_hotel_options(city_code: str, check_in: str, check_out: str, adult
     except Exception as e:
         print(f"  ❌ Error fetching hotel options: {e}")
     
-    # If no real options found, create mock data for demonstration
+    # If no real options found, return empty list (no mock data)
     if not options:
-        print(f"  📝 Creating mock hotel options for demonstration...")
-        mock_hotels = [
-            HotelOption(
-                provider="demo",
-                name=f"Luxury Hotel {city_code}",
-                city=city_code,
-                price_currency="USD",
-                price_total=120.00,
-                check_in=check_in,
-                check_out=check_out,
-                address=f"123 Main Street, {city_code}",
-                deep_link=None
-            ),
-            HotelOption(
-                provider="demo",
-                name=f"Mid-range Hotel {city_code}",
-                city=city_code,
-                price_currency="USD",
-                price_total=80.00,
-                check_in=check_in,
-                check_out=check_out,
-                address=f"456 Central Ave, {city_code}",
-                deep_link=None
-            ),
-            HotelOption(
-                provider="demo",
-                name=f"Budget Hotel {city_code}",
-                city=city_code,
-                price_currency="USD",
-                price_total=45.00,
-                check_in=check_in,
-                check_out=check_out,
-                address=f"789 Side Street, {city_code}",
-                deep_link=None
-            )
-        ]
-        options.extend(mock_hotels)
+        print(f"  ⚠️  No hotel options found from any provider")
+        print(f"  💡 Please check your API credentials and try again")
     
     options.sort(key=lambda x: x.price_total)
     print(f"  ✅ Found {len(options)} hotel options")

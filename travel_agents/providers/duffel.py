@@ -4,9 +4,16 @@ from typing import Optional
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 DUFFEL_TOKEN = os.getenv("DUFFEL_ACCESS_TOKEN")
 DUFFEL_BASE = "https://api.duffel.com"
+
+# Debug: Print loaded credentials (without values for security)
+print(f"🔧 Duffel Provider - Environment check:")
+print(f"   DUFFEL_ACCESS_TOKEN: {'✅ Set' if DUFFEL_TOKEN else '❌ Missing'}")
 
 
 HEADERS = {

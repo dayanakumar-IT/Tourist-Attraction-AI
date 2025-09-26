@@ -80,30 +80,10 @@ async def get_flight_options(origin_iata: str, dest_iata: str, depart_date: str,
     except Exception as e:
         print(f"  ❌ Error fetching flight options from Duffel: {e}")
     
-    # If no real options found, create mock data for demonstration
+    # If no real options found, return empty list (no mock data)
     if not options:
-        print(f"  📝 Creating mock flight options for demonstration...")
-        mock_options = [
-            FlightOption(
-                provider="demo",
-                summary=f"{origin_iata} → {dest_iata} (Direct)",
-                price_currency="USD",
-                price_total=450.00
-            ),
-            FlightOption(
-                provider="demo",
-                summary=f"{origin_iata} → {dest_iata} (1 stop)",
-                price_currency="USD",
-                price_total=380.00
-            ),
-            FlightOption(
-                provider="demo",
-                summary=f"{origin_iata} → {dest_iata} (2 stops)",
-                price_currency="USD",
-                price_total=320.00
-            )
-        ]
-        options.extend(mock_options)
+        print(f"  ⚠️  No flight options found from any provider")
+        print(f"  💡 Please check your API credentials and try again")
     
     # Sort by price
     options.sort(key=lambda x: x.price_total or float("inf"))
