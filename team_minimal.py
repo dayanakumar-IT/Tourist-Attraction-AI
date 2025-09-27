@@ -1,12 +1,13 @@
-# team_minimal.py — Attraction Finder + Rating Analyzer (LLM-only, robust, emoji UI)
+# team_minimal.py — Attraction Finder + Rating Analyzer (LLM-only, robust, emoji UI + photo/crowd/duration)
 # Inputs: city, interests, number of free/low-cost alternatives
 # Output: actual places (from Gemini) with name, category, best time/season, notes, rating
+# Plus: 📸 photo_tip, 📷 photo_spots, 👥 crowd_level, 🕒 duration
 
 import os, asyncio, json, re
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
-from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
+from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_ext.models.openai import OpenAIChatCompletionClient
@@ -86,8 +87,13 @@ def last_from_agent(convo, agent_name: str) -> str:
     return convo.messages[-1].content if convo.messages else ""
 
 def normalize_attractions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize fields and keep the new extras (photo_tip, photo_spots, crowd_level, duration)."""
     norm = []
     for x in items or []:
+        # photo_spots can be list or string; normalize to short comma-joined string
+        _spots = x.get("photo_spots") or x.get("photography_spots") or ""
+        if isinstance(_spots, list):
+            _spots = ", ".join([str(s).strip() for s in _spots if str(s).strip()])
         norm.append({
             "name": (x.get("name") or "").strip() or "Unknown",
             "category": (x.get("category") or "").strip() or "-",
@@ -95,7 +101,14 @@ def normalize_attractions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "notes": (x.get("notes") or x.get("why") or "").strip() or "",
             "rating": float(x.get("rating", 0.0)) if str(x.get("rating", "")).strip() != "" else 0.0,
             "cost": (x.get("cost") or "").strip().lower() or "unspecified",
+
+            # NEW
+            "duration": (x.get("duration") or x.get("suggested_duration") or "").strip(),
+            "crowd_level": (x.get("crowd_level") or x.get("crowd") or "").strip().lower(),
+            "photo_tip": (x.get("photo_tip") or x.get("photography_tip") or "").strip(),
+            "photo_spots": _spots.strip(),
         })
+    # de-dup by name
     seen = set(); out = []
     for it in norm:
         key = it["name"].lower()
@@ -131,7 +144,6 @@ def category_emoji(cat: str) -> str:
 
 def time_emoji(bt: str) -> str:
     s = (bt or "").lower()
-    # months/seasons/dayparts
     if any(m in s for m in ["nov", "dec", "jan", "feb", "winter"]): return "❄️"
     if any(m in s for m in ["mar", "apr", "may", "spring"]): return "🌸"
     if any(m in s for m in ["jun", "jul", "aug", "summer"]): return "☀️"
@@ -143,7 +155,6 @@ def time_emoji(bt: str) -> str:
     return "🕒"
 
 def stars(r: float) -> str:
-    # 5-star bar with half step approximation
     r = max(0.0, min(5.0, float(r or 0.0)))
     full = int(r)
     half = 1 if (r - full) >= 0.5 else 0
@@ -176,8 +187,18 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
         rt   = f"{stars(r['rating'])} {r['rating']:.1f}"
         cst  = cost_emoji(r["cost"])
         print(fmt.format(i, name, cat, bt, rt, cst))
+        # detail lines
         if r.get("notes"):
             print(f"    💡 Why visit: {r['notes']}")
+        if r.get("duration"):
+            print(f"    🕒 Duration: {r['duration']}")
+        if r.get("crowd_level"):
+            crowd = r['crowd_level'].capitalize()
+            print(f"    👥 Crowd: {crowd}")
+        if r.get("photo_tip"):
+            print(f"    📸 Photo tip: {r['photo_tip']}")
+        if r.get("photo_spots"):
+            print(f"    📷 Spots: {r['photo_spots']}")
         print()
 
 # ========= Main =========
@@ -226,6 +247,7 @@ async def main():
     interests = redact_pii(interests)
 
     # ---- Agents ----
+    # Example payload extended with new fields
     example_attractions_payload = {
         "city": "Example City",
         "interests": ["museums", "temples", "nature"],
@@ -237,7 +259,11 @@ async def main():
                 "best_time": "Nov–Mar (dry / cooler)",
                 "notes": "Renowned permanent collection; guided tours; near main transit.",
                 "rating": 4.5,
-                "cost": "paid"
+                "cost": "paid",
+                "duration": "1–2 hours",
+                "crowd_level": "moderate",
+                "photo_tip": "Wide-angle of the façade from the plaza at golden hour.",
+                "photo_spots": ["Front plaza", "Grand staircase"]
             },
             {
                 "name": "Riverside Promenade",
@@ -245,7 +271,11 @@ async def main():
                 "best_time": "Sunset; Dec–Feb less humid",
                 "notes": "Free riverside walk with food stalls; photo spots.",
                 "rating": 4.2,
-                "cost": "free"
+                "cost": "free",
+                "duration": "45–90 min",
+                "crowd_level": "busy",
+                "photo_tip": "Capture reflections after sunset from the west bend.",
+                "photo_spots": ["West bend overlook", "Old bridge"]
             }
         ]
     }
@@ -257,13 +287,17 @@ async def main():
             "ROLE: Attraction Finder.\n"
             "You MUST propose REAL public attractions that a tourist can actually visit in the given CITY. "
             "Do not invent locations. Prefer well-known, well-reviewed places.\n\n"
+            "For EACH attraction, return the following fields:\n"
+            "- name (string)\n- category (string)\n- best_time (string)\n- notes (string)\n- rating (0–5 float)\n"
+            "- cost (free|low|paid)\n- duration (string like '45 min', '1–2 hours', 'half-day')\n"
+            "- crowd_level (one of: quiet, moderate, busy)\n"
+            "- photo_tip (concise composition tip)\n"
+            "- photo_spots (list of 1–3 short spot names)\n\n"
             "OUTPUT FORMAT (STRICT):\n"
             "ATTRACTIONS:\njson\n" + json.dumps(example_attractions_payload, ensure_ascii=False, indent=2) + "\n\n"
             "NOTES:\n"
-            "- 'best_time' must be concrete (e.g., specific months/seasons or day periods like 'sunrise', 'late afternoon').\n"
-            "- 'category' is a concise type (e.g., Temple, Museum, Park, Market, Scenic Viewpoint, Neighborhood).\n"
-            "- 'rating' is a 0–5 float synthesized from public consensus.\n"
-            "- Include at least the requested number of free/low-cost items (if possible).\n"
+            "- Keep 'photo_tip' short and practical (e.g., “Best angle at sunrise from east gate”).\n"
+            "- 'photo_spots' should be 1–3 concise vantage points.\n"
             f"Return ONLY the fenced JSON block. End with {END_TOKEN}."
         ),
         model_client=model_client,
@@ -274,12 +308,9 @@ async def main():
         description="Ranks/scores attractions by interest fit, cost preference, and consensus rating.",
         system_message=(
             "ROLE: Rating & Ranking Analyzer.\n"
-            "Given ATTRACTIONS JSON with fields (name, category, best_time, notes, rating, cost), "
-            "compute a relevance score that blends:\n"
-            "  - rating (60%),\n"
-            "  - interest/category match (30%),\n"
-            "  - free/low-cost preference boost (10%).\n"
-            "Then output a sorted list (desc) with the same fields.\n\n"
+            "Given ATTRACTIONS JSON with fields (name, category, best_time, notes, rating, cost, duration, crowd_level, photo_tip, photo_spots), "
+            "compute a relevance score blending rating (60%), interest/category match (30%), and free/low-cost bonus (10%).\n"
+            "Return the same fields, sorted desc by your score. Do not drop fields.\n\n"
             "STRICT OUTPUT FORMAT:\n"
             "RATED_LIST:\njson\n"
             "{\n"
@@ -291,7 +322,11 @@ async def main():
             '      "best_time": "string",\n'
             '      "notes": "string",\n'
             '      "rating": 0.0,\n'
-            '      "cost": "free|low|paid"\n'
+            '      "cost": "free|low|paid",\n'
+            '      "duration": "string",\n'
+            '      "crowd_level": "quiet|moderate|busy",\n'
+            '      "photo_tip": "string",\n'
+            '      "photo_spots": ["string"]\n'
             "    }\n"
             "  ]\n"
             "}\n\n"
@@ -359,7 +394,6 @@ async def main():
             max_turns=2,
         )
         convo2 = await team2.run(task=task2)
-
         msg2 = last_from_agent(convo2, "rating_analyzer")
         raw_rate_replies.append(msg2)
         rated = extract_labeled_json("RATED_LIST", msg2)
