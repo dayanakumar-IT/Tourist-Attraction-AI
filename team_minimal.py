@@ -154,13 +154,6 @@ def time_emoji(bt: str) -> str:
     if "night" in s: return "🌙"
     return "🕒"
 
-def stars(r: float) -> str:
-    r = max(0.0, min(5.0, float(r or 0.0)))
-    full = int(r)
-    half = 1 if (r - full) >= 0.5 else 0
-    empty = 5 - full - half
-    return "★"*full + ("½" if half else "") + "☆"*empty
-
 # ========= Pretty printing =========
 def print_table(rows: List[Dict[str, Any]]) -> None:
     if not rows:
@@ -170,7 +163,7 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
     # header
     print("🏙️  Top Attractions\n")
     headers = ["#", "Place", "Category", "Best time", "Rating", "Cost"]
-    widths  = [3, 36, 18, 18, 11, 6]
+    widths  = [3, 36, 18, 18, 6, 6]  # Rating column tightened
 
     def trunc(s, w):
         s = (s or "").replace("\n", " ").strip()
@@ -184,7 +177,7 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
         name = f"{category_emoji(r['category'])} {trunc(r['name'], widths[1]-2)}"
         cat  = trunc(r["category"], widths[2])
         bt   = f"{time_emoji(r['best_time'])} {trunc(r['best_time'], widths[3]-2)}"
-        rt   = f"{stars(r['rating'])} {r['rating']:.1f}"
+        rt   = f"{r['rating']:.1f}"  # numeric only, no stars
         cst  = cost_emoji(r["cost"])
         print(fmt.format(i, name, cat, bt, rt, cst))
         # detail lines
