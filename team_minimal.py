@@ -1,8 +1,3 @@
-# team_minimal.py — Attraction Finder + Rating Analyzer (LLM-only, robust, emoji UI + photo/crowd/duration)
-# Inputs: city, interests, number of free/low-cost alternatives
-# Output: actual places (from Gemini) with name, category, best time/season, notes, rating
-# Plus: 📸 photo_tip, 📷 photo_spots, 👥 crowd_level, 🕒 duration
-
 import os, asyncio, json, re
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
