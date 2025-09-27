@@ -119,17 +119,17 @@ async def main():
     items = []
     while True:
         try:
-            name = input("\nEnter item name (press Enter to finish): ").strip()
+            name = input("\nEnter the place to be visited (press Enter to finish): ").strip()
         except EOFError:
             name = ""
         if not name:
             break
         try:
-            url = input("Enter item URL (e.g., https://...): ").strip()
+            url = input("Enter the place  URL (e.g., https://...): ").strip()
         except EOFError:
             url = ""
         try:
-            price_str = input("Enter item price (blank = unknown): ").strip()
+            price_str = input("Enter place ticket price (blank = unknown): ").strip()
             price = float(price_str) if price_str else None
         except Exception:
             price = None
