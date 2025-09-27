@@ -1,0 +1,6 @@
+autogen-agentchat>=0.4.0
+autogen-ext>=0.4.0
+python-dotenv>=1.0.1
+tiktoken>=0.7.0
+requests
+rich
