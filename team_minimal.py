@@ -1,15 +1,8 @@
-# team_minimal.py — Attraction Finder + Rating Analyzer (LLM-only, robust)
+# team_minimal.py — Attraction Finder + Rating Analyzer (LLM-only, robust, emoji UI)
 # Inputs: city, interests, number of free/low-cost alternatives
 # Output: actual places (from Gemini) with name, category, best time/season, notes, rating
-#
-# Key points:
-# • Two agents: attraction_finder, rating_analyzer
-# • Strict JSON contracts with retries and safe fallbacks
-# • No local catalogs; require real public attractions for the given city
-# • PII redaction + simple safety gate
-# • Works with Gemini (OpenAI-compatible) via autogen_ext.models.openai client
 
-import os, asyncio, json, re, datetime as dt
+import os, asyncio, json, re
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
@@ -19,7 +12,7 @@ from autogen_agentchat.conditions import TextMentionTermination
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 # ========= Config =========
-END_TOKEN = "###END###"  # unique end marker
+END_TOKEN = "###END###"
 
 # ========= Safety + PII =========
 BANNED_TOPICS = ["weapons", "explicit sexual content", "hate", "terror", "bomb", "kill"]
@@ -44,19 +37,13 @@ def redact_pii(text: str) -> str:
 
 # ========= JSON helpers =========
 def find_first_json_object(text: str) -> Optional[Dict[str, Any]]:
-    """Try multiple strategies to extract the first valid JSON object."""
-    # code-fence style: ```json { ... } ```
     m = re.search(r"json\s*(\{.*?\})\s*", text, re.I | re.S)
     candidates = []
     if m:
         candidates.append(m.group(1))
-
-    # label: {...}
     m2 = re.search(r":[ \t]({.})", text, re.S)
     if m2:
         candidates.append(m2.group(1))
-
-    # generic brace balance
     stack = 0
     start = None
     for i, ch in enumerate(text):
@@ -69,7 +56,6 @@ def find_first_json_object(text: str) -> Optional[Dict[str, Any]]:
             if stack == 0 and start is not None:
                 candidates.append(text[start:i+1])
                 break
-
     for c in candidates:
         try:
             return json.loads(c)
@@ -78,7 +64,6 @@ def find_first_json_object(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 def extract_labeled_json(label: str, text: str) -> Optional[Dict[str, Any]]:
-    """Extract JSON when the agent prefixes with LABEL: then fenced json."""
     m = re.search(rf"{label}\s*:\s*json\s*(\{{.*?\}})\s*", text, re.I | re.S)
     if m:
         try:
@@ -94,7 +79,6 @@ def extract_labeled_json(label: str, text: str) -> Optional[Dict[str, Any]]:
     return find_first_json_object(text)
 
 def last_from_agent(convo, agent_name: str) -> str:
-    """Get last content from a specific agent (lib-version tolerant)."""
     for m in reversed(convo.messages):
         src = getattr(m, "source", None) or getattr(m, "name", None) or getattr(m, "sender", None)
         if src and str(src).lower() == agent_name.lower():
@@ -110,41 +94,91 @@ def normalize_attractions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "best_time": (x.get("best_time") or x.get("season") or "").strip() or "-",
             "notes": (x.get("notes") or x.get("why") or "").strip() or "",
             "rating": float(x.get("rating", 0.0)) if str(x.get("rating", "")).strip() != "" else 0.0,
-            "cost": (x.get("cost") or "").strip() or "unspecified",  # we won't print this unless helpful
+            "cost": (x.get("cost") or "").strip().lower() or "unspecified",
         })
-    # de-dup by name (case-insensitive)
     seen = set(); out = []
     for it in norm:
         key = it["name"].lower()
-        if key in seen: 
+        if key in seen:
             continue
         seen.add(key)
         out.append(it)
     return out
+
+# ========= Emoji helpers =========
+def cost_emoji(cost: str) -> str:
+    c = (cost or "").lower()
+    if "free" in c:
+        return "🆓"
+    if "low" in c or "cheap" in c or "budget" in c:
+        return "💸"
+    if "paid" in c or "ticket" in c or "fee" in c:
+        return "💵"
+    return "💠"
+
+def category_emoji(cat: str) -> str:
+    c = (cat or "").lower()
+    if "museum" in c: return "🏛️"
+    if "temple" in c or "shrine" in c: return "🛕"
+    if "church" in c or "cathedral" in c: return "⛪"
+    if "park" in c or "garden" in c: return "🌿"
+    if "market" in c or "bazaar" in c: return "🛍️"
+    if "view" in c or "tower" in c or "sky" in c: return "🌄"
+    if "beach" in c: return "🏖️"
+    if "palace" in c or "fort" in c: return "🏰"
+    if "neighborhood" in c or "street" in c: return "🏘️"
+    return "📍"
+
+def time_emoji(bt: str) -> str:
+    s = (bt or "").lower()
+    # months/seasons/dayparts
+    if any(m in s for m in ["nov", "dec", "jan", "feb", "winter"]): return "❄️"
+    if any(m in s for m in ["mar", "apr", "may", "spring"]): return "🌸"
+    if any(m in s for m in ["jun", "jul", "aug", "summer"]): return "☀️"
+    if any(m in s for m in ["sep", "oct", "autumn", "fall"]): return "🍂"
+    if "sunrise" in s or "morning" in s: return "🌅"
+    if "afternoon" in s: return "🌤️"
+    if "sunset" in s or "evening" in s: return "🌇"
+    if "night" in s: return "🌙"
+    return "🕒"
+
+def stars(r: float) -> str:
+    # 5-star bar with half step approximation
+    r = max(0.0, min(5.0, float(r or 0.0)))
+    full = int(r)
+    half = 1 if (r - full) >= 0.5 else 0
+    empty = 5 - full - half
+    return "★"*full + ("½" if half else "") + "☆"*empty
 
 # ========= Pretty printing =========
 def print_table(rows: List[Dict[str, Any]]) -> None:
     if not rows:
         print("No attractions found.\n")
         return
-    # Simple monospace table
-    headers = ["#", "Name", "Category", "Best time/season", "Notes", "Rating/5"]
-    widths = [3, 30, 18, 20, 60, 8]
-    def trunc(s, w): 
+
+    # header
+    print("🏙️  Top Attractions\n")
+    headers = ["#", "Place", "Category", "Best time", "Rating", "Cost"]
+    widths  = [3, 36, 18, 18, 11, 6]
+
+    def trunc(s, w):
         s = (s or "").replace("\n", " ").strip()
         return s if len(s) <= w else (s[:w-1] + "…")
+
     fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
     print(fmt.format(*headers))
     print("-" * (sum(widths) + (len(widths)-1)*2))
+
     for i, r in enumerate(rows, 1):
-        print(fmt.format(
-            i,
-            trunc(r["name"], widths[1]),
-            trunc(r["category"], widths[2]),
-            trunc(r["best_time"], widths[3]),
-            trunc(r["notes"], widths[4]),
-            f"{r['rating']:.1f}"
-        ))
+        name = f"{category_emoji(r['category'])} {trunc(r['name'], widths[1]-2)}"
+        cat  = trunc(r["category"], widths[2])
+        bt   = f"{time_emoji(r['best_time'])} {trunc(r['best_time'], widths[3]-2)}"
+        rt   = f"{stars(r['rating'])} {r['rating']:.1f}"
+        cst  = cost_emoji(r["cost"])
+        print(fmt.format(i, name, cat, bt, rt, cst))
+        if r.get("notes"):
+            print(f"    💡 Why visit: {r['notes']}")
+        print()
 
 # ========= Main =========
 async def main():
@@ -167,17 +201,17 @@ async def main():
         },
     )
 
-    print("\n== Attraction Finder & Rating Analyzer ==")
+    print("\n== Attraction Finder & Rating Analyzer == ✈️🗺️")
     print("Type INSIDE this program when prompted. If you press Enter with no text, it will exit.")
     print("If you see the PowerShell prompt (PS C:\\...>), the program has ended.\n")
 
     # ---- Inputs ----
-    city = input("City (e.g., Kandy, Paris, Tokyo): ").strip()
+    city = input("🏙️  City (e.g., Kandy, Paris, Tokyo): ").strip()
     if not city:
         print("Please enter a city.")
         return
-    interests = input("Main interests (comma-separated, e.g., temples, museums, nature): ").strip()
-    n_free = input("How many FREE/LOW-COST alternatives to include? (e.g., 3): ").strip()
+    interests = input("🎯 Interests (comma-separated, e.g., temples, museums, nature): ").strip()
+    n_free = input("🆓 How many FREE/LOW-COST alternatives to include? (e.g., 3): ").strip()
     try:
         n_free = max(0, int(n_free)) if n_free else 0
     except ValueError:
@@ -192,7 +226,6 @@ async def main():
     interests = redact_pii(interests)
 
     # ---- Agents ----
-    # Attraction Finder Agent
     example_attractions_payload = {
         "city": "Example City",
         "interests": ["museums", "temples", "nature"],
@@ -231,7 +264,7 @@ async def main():
             "- 'category' is a concise type (e.g., Temple, Museum, Park, Market, Scenic Viewpoint, Neighborhood).\n"
             "- 'rating' is a 0–5 float synthesized from public consensus.\n"
             "- Include at least the requested number of free/low-cost items (if possible).\n"
-            "Return ONLY the fenced JSON block. End with " + END_TOKEN + "."
+            f"Return ONLY the fenced JSON block. End with {END_TOKEN}."
         ),
         model_client=model_client,
     )
@@ -262,12 +295,10 @@ async def main():
             "    }\n"
             "  ]\n"
             "}\n\n"
-            "No commentary before/after the fenced JSON. End with " + END_TOKEN + "."
+            f"No commentary before/after the fenced JSON. End with {END_TOKEN}."
         ),
         model_client=model_client,
     )
-
-    you = UserProxyAgent(name="you")
 
     # ---- Phase 1: Attraction Finder (with retries) ----
     def finder_task(strict_only=False):
@@ -284,9 +315,9 @@ async def main():
     raw_finder_replies = []
     for attempt in range(3):
         team1 = RoundRobinGroupChat(
-            participants=[you, attraction_finder],
+            participants=[attraction_finder],
             termination_condition=TextMentionTermination(END_TOKEN),
-            max_turns=3,
+            max_turns=2,
         )
         convo1 = await team1.run(task=finder_task(strict_only=(attempt >= 1)))
         msg1 = last_from_agent(convo1, "attraction_finder")
@@ -323,34 +354,33 @@ async def main():
     raw_rate_replies = []
     for attempt in range(2):
         team2 = RoundRobinGroupChat(
-            participants=[you, rating_analyzer],
+            participants=[rating_analyzer],
             termination_condition=TextMentionTermination(END_TOKEN),
             max_turns=2,
         )
         convo2 = await team2.run(task=task2)
+        
         msg2 = last_from_agent(convo2, "rating_analyzer")
         raw_rate_replies.append(msg2)
         rated = extract_labeled_json("RATED_LIST", msg2)
         if rated and isinstance(rated.get("sorted"), list) and rated["sorted"]:
             break
 
-    # Fallback: if rating analyzer JSON fails, just use base_items sorted by rating
+    # Fallback: sort by rating locally
     if not rated or not rated.get("sorted"):
         sorted_items = sorted(base_items, key=lambda r: r.get("rating", 0.0), reverse=True)
     else:
         sorted_items = normalize_attractions(rated["sorted"])
 
     # ---- Output ----
-    print("\n--- Top Attractions ---\n")
-    print(f"City: {city}")
+    print(f"\n--- Top Attractions for {city} ---\n")
     if interests:
-        print(f"Interests: {interests}")
+        print(f"🎯 Interests: {interests}")
     if n_free:
-        print(f"Requested free/low-cost items: {n_free}")
+        print(f"🆓 Requested free/low-cost items: {n_free}")
     print()
     print_table(sorted_items)
 
-    # Cosmetic end marker
     print("\n###END###\n")
 
 if __name__ == "__main__":
