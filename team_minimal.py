@@ -394,7 +394,7 @@ async def main():
     else:
         sorted_items = normalize_attractions(rated["sorted"])
 
-    # ---- Output ----
+    # ---- Output structure----
     print(f"\n--- Top Attractions for {city} ---\n")
     if interests:
         print(f"🎯 Interests: {interests}")
