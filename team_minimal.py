@@ -359,7 +359,7 @@ async def main():
             max_turns=2,
         )
         convo2 = await team2.run(task=task2)
-        
+
         msg2 = last_from_agent(convo2, "rating_analyzer")
         raw_rate_replies.append(msg2)
         rated = extract_labeled_json("RATED_LIST", msg2)
@@ -380,8 +380,6 @@ async def main():
         print(f"🆓 Requested free/low-cost items: {n_free}")
     print()
     print_table(sorted_items)
-
-    print("\n###END###\n")
 
 if __name__ == "__main__":
     asyncio.run(main())
