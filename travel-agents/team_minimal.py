@@ -246,30 +246,183 @@ def print_pretty(final_dict: dict):
                 print(f"   - {n}")
         print("\n--------------------------------\n")
 
-# Agents
+# ---------- Tool Wrapper Functions ----------
+def tool_resolve_locations(user_query: str) -> dict:
+    """Tool to resolve origin/destination from user query"""
+    try:
+        dest, country, sdate, edate, nights, adults = parse_trip_free_text(user_query)
+        
+        # Use from/to if present
+        orig_inline, dest_inline = parse_from_to(user_query)
+        if dest_inline:
+            dest = dest_inline
+        
+        origin_text = parse_origin_free_text(user_query)
+        if not origin_text:
+            origin_text = "Colombo Sri Lanka"
+            
+        # Resolve city names → IATA
+        city_name = resolve_destination_city(dest)
+        dest_city_code = resolve_iata_city_code(city_name, fallback="PAR")
+        origin_city_code = resolve_iata_city_code(origin_text, fallback="CMB")
+        
+        return {
+            "destination": dest,
+            "city_name": city_name,
+            "dest_city_code": dest_city_code,
+            "origin_city_code": origin_city_code,
+            "start_date": sdate,
+            "end_date": edate,
+            "adults": adults,
+            "nights": nights
+        }
+    except Exception as e:
+        return {"error": f"Failed to resolve locations: {e}"}
+
+def tool_search_flights(origin_code: str, dest_code: str, start_date: str, end_date: str, adults: int) -> dict:
+    """Tool to search for flights"""
+    try:
+        # ---- Flights: top-3 each way via Duffel, paired by index ----
+        out = search_one_way_topn(origin_code, dest_code, start_date or "", adults, n=3)
+        ret = search_one_way_topn(dest_code, origin_code, end_date or "", adults, n=3) if end_date else {"offers": [], "debug": "No end_date provided"}
+
+        out_offers = out.get("offers") or []
+        ret_offers = ret.get("offers") or []
+
+        flight_options: list[FlightOption] = []
+        for i in range(min(3, len(out_offers or []), len(ret_offers or []))):
+            fopt = normalize_roundtrip_pair(origin_code, dest_code, out_offers[i], ret_offers[i])
+            flight_options.append(fopt)
+        if not flight_options and (out_offers or ret_offers):
+            top = out_offers or ret_offers
+            for i in range(min(3, len(top))):
+                fopt = normalize_roundtrip_pair(origin_code, dest_code, top[i] if out_offers else None, None if out_offers else top[i])
+                flight_options.append(fopt)
+        if not flight_options:
+            from schemas import FlightLeg
+            flight_options = [
+                FlightOption(
+                    summary=f"{origin_code}↔{dest_code} (MockAir, direct/direct)",
+                    price_total=500.0, price_currency="USD", airline="MockAir",
+                    origin_iata=origin_code, destination_iata=dest_code,
+                    outbound_price=250.0, return_price=250.0,
+                    legs_outbound=[FlightLeg(carrier="MockAir", origin=origin_code, destination=dest_code, duration_iso="PT5H")],
+                    legs_return=[FlightLeg(carrier="MockAir", origin=dest_code, destination=origin_code, duration_iso="PT5H")],
+                    stops_outbound=0, stops_return=0,
+                    duration_outbound_iso="PT5H", duration_return_iso="PT5H",
+                    is_direct_outbound=True, is_direct_return=True
+                )
+            ]
+
+        flight_result = FlightSearchResult(
+            source="duffel" if (out_offers or ret_offers) else "mock",
+            options=flight_options,
+            debug="; ".join([d for d in [out.get('debug'), ret.get('debug')] if d]) or None
+        )
+        
+        return {"flights": [f.model_dump() for f in flight_result.options], "debug": flight_result.debug}
+    except Exception as e:
+        return {"error": f"Flight search failed: {e}"}
+
+def tool_search_hotels(dest_code: str, city_name: str, start_date: str, end_date: str, adults: int) -> dict:
+    """Tool to search for hotels"""
+    try:
+        # ---- Hotels: Amadeus first, then Booking.com fallback ----
+        raw_hotels = hotel_offers(dest_code, start_date, end_date, adults)
+        hotels = normalize_hotels(raw_hotels)
+
+        booking_dbg = None
+        if not hotels:
+            try:
+                dest_id = find_city_dest_id(city_name)  # Booking.com uses dest_id (not IATA)
+                if dest_id and start_date and end_date:
+                    b_raw = booking_hotel_search_city(
+                        dest_id=dest_id,
+                        checkin=start_date,
+                        checkout=end_date,
+                        adults=adults,
+                        currency="USD",
+                        locale="en-gb",
+                        order_by="price"
+                    )
+                    hotels = normalize_booking_hotels(b_raw)
+                    booking_dbg = b_raw.get("error")
+                else:
+                    booking_dbg = "Missing dest_id or dates for Booking.com fallback"
+            except Exception as booking_error:
+                booking_dbg = f"Booking.com API error: {booking_error}"
+
+        hsrc = "amadeus" if (raw_hotels.get("data") if isinstance(raw_hotels, dict) else None) else ("booking" if hotels else "mock")
+        hdbg = None
+        if not hotels:
+            hdbg = f"No hotels from Amadeus or Booking for {city_name} ({start_date}..{end_date})."
+            hotels = [
+                {"name": "Test Property — Budget", "stars": 2, "neighborhood": "Central", "price_total": 55.0, "price_currency": "EUR", "deep_link": None},
+                {"name": "Test Property — Midscale", "stars": 3, "neighborhood": "Central", "price_total": 95.0, "price_currency": "EUR", "deep_link": None},
+                {"name": "Test Property — Boutique", "stars": 4, "neighborhood": "Central", "price_total": 145.0, "price_currency": "EUR", "deep_link": None},
+            ]
+
+        return {"hotels": hotels, "debug": booking_dbg or hdbg}
+    except Exception as e:
+        return {"error": f"Hotel search failed: {e}"}
+
+def tool_make_combos(destination: str, date_window: str, flights_data: list, hotels_data: list) -> dict:
+    """Tool to combine flights and hotels into packages"""
+    try:
+        flights = [FlightOption(**f) for f in flights_data]
+        hotels = [HotelOption(**h) for h in hotels_data]
+        
+        final = make_combos(destination=destination, date_window=date_window, flights=flights, hotels=hotels)
+        return final.model_dump()
+    except Exception as e:
+        return {"error": f"Package combination failed: {e}"}
+
+def tool_print_results(combos_data: dict) -> str:
+    """Tool to format and print final results"""
+    try:
+        print_pretty(combos_data)
+        return "Results displayed successfully"
+    except Exception as e:
+        return f"Error displaying results: {e}"
+
+# ---------- Agents with Tools ----------
 flight_agent = AssistantAgent(
     name="flight_agent",
-    description="Finds flight options (top-3 per direction via Duffel).",
-    system_message="You are the Travel Finder Agent (flights).",
+    description="Finds flight options using Duffel API",
+    system_message="""You are the Flight Search Agent. When asked to search for flights, use the tool_search_flights function with the provided parameters (origin_code, dest_code, start_date, end_date, adults). Return the flight results to the orchestrator. Always be helpful and provide clear information about the flights found.""",
     model_client=model_client,
+    tools=[tool_search_flights]
 )
+
 stay_agent = AssistantAgent(
     name="stay_agent",
-    description="Finds hotel options given city code/dates/adults",
-    system_message="You are the Accommodation Finder Agent (hotels).",
+    description="Finds hotel options using Amadeus and Booking APIs",
+    system_message="""You are the Hotel Search Agent. When asked to search for hotels, use the tool_search_hotels function with the provided parameters (dest_code, city_name, start_date, end_date, adults). Return the hotel results to the orchestrator. Always be helpful and provide clear information about the accommodations found.""",
     model_client=model_client,
+    tools=[tool_search_hotels]
 )
+
 orchestrator = AssistantAgent(
     name="orchestrator",
-    description="Merges results into 3 combos with reasons.",
-    system_message="You are the Orchestrator.",
+    description="Coordinates travel planning and combines results",
+    system_message="""You are the Travel Planning Orchestrator. Your role is to:
+1. Parse user travel requests using tool_resolve_locations
+2. Ask flight_agent to search flights with the resolved parameters
+3. Ask stay_agent to search hotels with the resolved parameters  
+4. Use tool_make_combos to combine the results into travel packages
+5. Use tool_print_results to display the final packages
+6. End your final message with "DONE" to complete the process
+
+Always coordinate politely with other agents and provide clear instructions.""",
     model_client=model_client,
+    tools=[tool_resolve_locations, tool_make_combos, tool_print_results]
 )
+
 user = UserProxyAgent(name="you")
 team = RoundRobinGroupChat(
     participants=[user, orchestrator, flight_agent, stay_agent],
     termination_condition=TextMentionTermination("DONE"),
-    max_turns=8,
+    max_turns=12,
 )
 
 # ---------- Terminal prompts ----------
@@ -311,105 +464,87 @@ def prompt_user() -> TripQuery:
     )
 
 async def main():
-    q = prompt_user()
+    """Main function now using multi-agent conversation"""
+    try:
+        q = prompt_user()
 
-    # Resolve city names → IATA
-    city_name = resolve_destination_city(q.destination)
-    dest_city_code = resolve_iata_city_code(city_name, fallback="PAR")
-    origin_city_code = resolve_iata_city_code(q.origin_text or "Colombo Sri Lanka", fallback="CMB")
+        # Create the initial message for the team
+        initial_message = f"""Plan a trip with these details:
+        
+User Query: {q.raw_text}
+Destination: {q.destination}
+Start Date: {q.start_date or 'TBD'}
+End Date: {q.end_date or 'TBD'}
+Adults: {q.adults}
+Origin: {q.origin_text or 'Not specified'}
 
-    # ---- Flights: top-3 each way via Duffel, paired by index ----
-    out = search_one_way_topn(origin_city_code, dest_city_code, q.start_date or "", q.adults, n=3)
-    ret = search_one_way_topn(dest_city_code, origin_city_code, q.end_date or "", q.adults, n=3) if q.end_date else {"offers": [], "debug": "No end_date provided"}
+Please coordinate to find flights, hotels, and create travel packages."""
 
-    out_offers = out.get("offers") or []
-    ret_offers = ret.get("offers") or []
-
-    flight_options: list[FlightOption] = []
-    for i in range(min(3, len(out_offers or []), len(ret_offers or []))):
-        fopt = normalize_roundtrip_pair(origin_city_code, dest_city_code, out_offers[i], ret_offers[i])
-        flight_options.append(fopt)
-    if not flight_options and (out_offers or ret_offers):
-        top = out_offers or ret_offers
-        for i in range(min(3, len(top))):
-            fopt = normalize_roundtrip_pair(origin_city_code, dest_city_code, top[i] if out_offers else None, None if out_offers else top[i])
-            flight_options.append(fopt)
-    if not flight_options:
-        from schemas import FlightLeg
-        flight_options = [
-            FlightOption(
-                summary=f"{origin_city_code}↔{dest_city_code} (MockAir, direct/direct)",
-                price_total=500.0, price_currency="USD", airline="MockAir",
-                origin_iata=origin_city_code, destination_iata=dest_city_code,
-                outbound_price=250.0, return_price=250.0,
-                legs_outbound=[FlightLeg(carrier="MockAir", origin=origin_city_code, destination=dest_city_code, duration_iso="PT5H")],
-                legs_return=[FlightLeg(carrier="MockAir", origin=dest_city_code, destination=origin_city_code, duration_iso="PT5H")],
-                stops_outbound=0, stops_return=0,
-                duration_outbound_iso="PT5H", duration_return_iso="PT5H",
-                is_direct_outbound=True, is_direct_return=True
+        print(f"\n🎯 Starting multi-agent trip planning...")
+        print(f"📋 Request: {initial_message}")
+        
+        # Kick off the conversation by letting the user speak first
+        await team.a_send(message=initial_message, sender=user)
+        # Then run the group chat loop until termination condition is met
+        result = await team.run()
+        
+        print("\n✅ Multi-agent travel planning completed!")
+        
+    except Exception as e:
+        print(f"\n❌ Error in agent conversation: {e}")
+        rprint(f"\n[bold red]Agent Error:[/bold red] {e}")
+        
+        # Fallback to show that system still works
+        print("\n🔄 Falling back to direct tool processing...")
+        q = prompt_user() if 'q' not in locals() else q
+        
+        # Use tools directly as fallback
+        locations = tool_resolve_locations(q.raw_text)
+        if "error" not in locations:
+            print(f"✅ Locations resolved: {locations['origin_city_code']} → {locations['dest_city_code']}")
+            
+            flights = tool_search_flights(
+                locations["origin_city_code"],
+                locations["dest_city_code"], 
+                locations["start_date"],
+                locations["end_date"],
+                locations["adults"]
             )
-        ]
-
-    flight_result = FlightSearchResult(
-        source="duffel" if (out_offers or ret_offers) else "mock",
-        options=flight_options,
-        debug="; ".join([d for d in [out.get('debug'), ret.get('debug')] if d]) or None
-    )
-
-    # ---- Hotels: Amadeus first, then Booking.com fallback ----
-    raw_hotels = hotel_offers(dest_city_code, q.start_date, q.end_date, q.adults)
-    hotels = normalize_hotels(raw_hotels)
-
-    booking_dbg = None
-    if not hotels:
-        dest_id = find_city_dest_id(city_name)  # Booking.com uses dest_id (not IATA)
-        if dest_id and q.start_date and q.end_date:
-            b_raw = booking_hotel_search_city(
-                dest_id=dest_id,
-                checkin=q.start_date,
-                checkout=q.end_date,
-                adults=q.adults,
-                currency="USD",
-                locale="en-gb",
-                order_by="price"
-            )
-            hotels = normalize_booking_hotels(b_raw)
-            booking_dbg = b_raw.get("error")
+            
+            if "error" not in flights:
+                print(f"✅ Found {len(flights['flights'])} flight options")
+                
+                hotels = tool_search_hotels(
+                    locations["dest_city_code"],
+                    locations["city_name"],
+                    locations["start_date"], 
+                    locations["end_date"],
+                    locations["adults"]
+                )
+                
+                if "error" not in hotels:
+                    print(f"✅ Found {len(hotels['hotels'])} hotel options")
+                    
+                    # Prefer user's provided dates in fallback output window
+                    date_window = f"{q.start_date or locations['start_date']} to {q.end_date or locations['end_date']}"
+                    combos = tool_make_combos(
+                        locations["city_name"],
+                        date_window,
+                        flights["flights"],
+                        hotels["hotels"]
+                    )
+                    
+                    if "error" not in combos:
+                        print("\n✅ Packages created successfully!")
+                        tool_print_results(combos)
+                    else:
+                        print(f"❌ Package creation failed: {combos['error']}")
+                else:
+                    print(f"❌ Hotel search failed: {hotels['error']}")
+            else:
+                print(f"❌ Flight search failed: {flights['error']}")
         else:
-            booking_dbg = "Missing dest_id or dates for Booking.com fallback"
-
-    hsrc = "amadeus" if (raw_hotels.get("data") if isinstance(raw_hotels, dict) else None) else ("booking" if hotels else "mock")
-    hdbg = None
-    if not hotels:
-        hdbg = f"No hotels from Amadeus or Booking for {city_name} ({q.start_date}..{q.end_date})."
-
-    hotel_result = HotelSearchResult(
-        source=hsrc,
-        options=[HotelOption(**h) for h in hotels] if hotels else [],
-        debug=booking_dbg or hdbg
-    )
-
-    # ---- Ensure we can show up to 3 packages (fallback hotels if still empty) ----
-    flights_opts = flight_result.options
-    hotels_opts = hotel_result.options if hotel_result.options else [
-        HotelOption(name="Test Property — Budget",   stars=2, neighborhood="Central", price_total=55.0,  price_currency="EUR", deep_link=None),
-        HotelOption(name="Test Property — Midscale", stars=3, neighborhood="Central", price_total=95.0,  price_currency="EUR", deep_link=None),
-        HotelOption(name="Test Property — Boutique", stars=4, neighborhood="Central", price_total=145.0, price_currency="EUR", deep_link=None),
-    ]
-
-    date_window = f"{q.start_date or 'TBD'} to {q.end_date or 'TBD'}"
-    final = make_combos(destination=city_name, date_window=date_window, flights=flights_opts, hotels=hotels_opts)
-
-    # ---- Output (pretty) ----
-    print_pretty(final.model_dump())
-
-    # Diagnostics
-    if flight_result.debug or hotel_result.debug:
-        rprint("\n[bold yellow]Diagnostics[/bold yellow]")
-        if flight_result.debug:
-            rprint(f"[yellow]Flights:[/yellow] {flight_result.debug}")
-        if hotel_result.debug:
-            rprint(f"[yellow]Hotels:[/yellow] {hotel_result.debug}")
+            print(f"❌ Location resolution failed: {locations['error']}")
 
 if __name__ == "__main__":
     asyncio.run(main())

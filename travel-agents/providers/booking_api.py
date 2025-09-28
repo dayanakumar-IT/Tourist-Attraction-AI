@@ -28,7 +28,7 @@ def find_city_dest_id(name: str, locale: str = "en-gb") -> Optional[str]:
         return None
     url = f"{BASE_URL}/hotels/locations"
     params = {"name": name, "locale": locale}
-    r = requests.get(url, headers=_headers(), params=params, timeout=20)
+    r = requests.get(url, headers=_headers(), params=params, timeout=45)
     if r.status_code >= 400:
         return None
     data = r.json()
@@ -61,7 +61,7 @@ def booking_hotel_search_city(dest_id: str,
         "filter_by_currency": currency,
         "page_number": page_number,
     }
-    r = requests.get(url, headers=_headers(), params=params, timeout=30)
+    r = requests.get(url, headers=_headers(), params=params, timeout=45)
     if r.status_code >= 400:
         return {"result": [], "error": f"{r.status_code} {r.text}"}
     return r.json()
