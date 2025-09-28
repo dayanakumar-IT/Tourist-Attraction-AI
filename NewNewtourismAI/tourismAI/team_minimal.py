@@ -20,6 +20,7 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 END_TOKEN = "###END###"  # unique end marker to avoid premature termination
 
 # ========= Safety + PII =========
+# Very small guardrail list. In a real app you would use a richer policy.
 BANNED_TOPICS = ["weapons", "explicit sexual content", "hate", "terror", "bomb", "kill"]
 def policy_gate(text: str) -> tuple[bool, str]:
     lo = text.lower()
@@ -27,6 +28,7 @@ def policy_gate(text: str) -> tuple[bool, str]:
         return False, "Request violates content/safety policy."
     return True, ""
 
+# PII redaction patterns: email, phone-like strings, and credit card-like strings
 PII_PATTERNS = [
     (re.compile(r'\b[\w\.-]+@[\w\.-]+\.\w{2,}\b'), "<EMAIL>"),
     (re.compile(r'\b\+?\d[\d\-\s]{7,}\d\b'), "<PHONE>"),
@@ -223,6 +225,7 @@ async def main():
         ]
     }
 
+# Planner agent: merges group needs and outputs a ROUTE_REQUEST JSON.
     group_agent = AssistantAgent(
         name="group_planner",
         description="Generates attractions for any destination, merges preferences, resolves conflicts, returns ROUTE_REQUEST JSON.",
@@ -242,7 +245,7 @@ async def main():
         ),
         model_client=model_client,
     )
-
+# Route optimizer agent: reorders stops and emits ROUTE_DECISION JSON.
     route_agent = AssistantAgent(
         name="route_optimizer",
         description="Orders stops efficiently and returns ROUTE_DECISION JSON.",
@@ -276,7 +279,7 @@ async def main():
             f"{tighten}"
         )
 
-    # ---- Phase 1: Group planning with up to 3 retries ----
+    # ---- Phase 1: Group planning with up to 3 retries --
     route_req = None
     raw_planner_replies = []
     for attempt in range(3):
@@ -370,9 +373,10 @@ async def main():
         ord_try = greedy_route(chosen)
         ordered = ord_try if ord_try else chosen
 
+# Create a time-based itinerary beginning at 09:00 with 10-minute buffers
     day = schedule_day(ordered, start_time="09:00")
 
-    # ---- Output ----
+    # ---- Output to console ----
     print("\n--- Final Itinerary ---\n")
     dest = route_req.get("city", city)
     print(f"Destination: {dest}\n")
@@ -396,3 +400,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
