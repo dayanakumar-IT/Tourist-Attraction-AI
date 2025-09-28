@@ -7,6 +7,12 @@ from urllib.parse import urlparse, quote_plus
 from typing import Optional, Tuple
 
 import httpx
+from dotenv import load_dotenv
+
+# -------------------------------------------------------------------
+# Ensure .env is loaded even if caller forgot to do it
+# -------------------------------------------------------------------
+load_dotenv()
 
 # -------------------------------------------------------------------
 # Env keys (leave blank -> function returns None and pipeline degrades gracefully)
@@ -14,8 +20,8 @@ import httpx
 GSB_KEY = os.getenv("GSB_KEY") or ""
 OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY") or ""
 GOOGLE_MAPS_KEY = os.getenv("GOOGLE_MAPS_KEY") or ""
-DEBUG_LIVE = os.getenv("DEBUG_LIVE", "0") == "1"   # set DEBUG_LIVE=1 to print debug lines
-
+DEBUG_LIVE = os.getenv("DEBUG_LIVE", "0") == "1"         # set DEBUG_LIVE=1 to print debug lines
+ALWAYS_TIP = os.getenv("ALWAYS_TIP", "0") == "1"         # set ALWAYS_TIP=1 to force a generic safety tip
 
 # =========================
 # URL / DOMAIN CHECKS
@@ -61,6 +67,7 @@ async def gsb_is_malicious(url: str) -> Optional[bool]:
     Returns True/False, or None if no key/failed.
     """
     if not GSB_KEY:
+        if DEBUG_LIVE: print("[GSB] no key configured")
         return None
     payload = {
         "client": {"clientId": "tourismAI", "clientVersion": "1.0"},
@@ -109,6 +116,7 @@ _PRICE_LEVEL_TO_MEDIAN = {
 async def _places_text_search(city: str, name: str) -> Optional[str]:
     """Return first place_id for query 'name city'."""
     if not GOOGLE_MAPS_KEY:
+        if DEBUG_LIVE: print("[PLACES search] no key configured")
         return None
     q = quote_plus(f"{name} {city}".strip())
     url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={q}&key={GOOGLE_MAPS_KEY}"
@@ -132,6 +140,7 @@ async def _places_text_search(city: str, name: str) -> Optional[str]:
 async def google_place_official_website(city: str, name: str) -> Optional[str]:
     """Uses Places Text Search -> Details to get official website; requires GOOGLE_MAPS_KEY."""
     if not GOOGLE_MAPS_KEY:
+        if DEBUG_LIVE: print("[PLACES website] no key configured")
         return None
     place_id = await _places_text_search(city, name)
     if not place_id:
@@ -157,6 +166,7 @@ async def google_place_official_website(city: str, name: str) -> Optional[str]:
 async def google_place_price_median(city: str, name: str) -> Optional[float]:
     """Derive a median-ish price from Google price_level (0-4)."""
     if not GOOGLE_MAPS_KEY:
+        if DEBUG_LIVE: print("[PLACES price] no key configured")
         return None
     place_id = await _places_text_search(city, name)
     if not place_id:
@@ -190,8 +200,13 @@ async def openweather_advisory(city: str) -> Optional[str]:
     """
     Return a short weather safety tip for the city, or None.
     Uses current weather; keep messages short and actionable.
+    - Accepts 'City' or 'City,CC' (recommended).
+    - More forgiving thresholds to produce tips in demos.
+    - When DEBUG_LIVE=1, prints the raw key values.
     """
     if not OPENWEATHER_KEY or not city:
+        if DEBUG_LIVE:
+            print(f"[WX] key_present={bool(OPENWEATHER_KEY)} city='{city}' (missing key or city => no tip)")
         return None
 
     try:
@@ -211,25 +226,27 @@ async def openweather_advisory(city: str) -> Optional[str]:
     weather_list = data.get("weather") or [{}]
     main = (weather_list[0] or {}).get("main", "") or ""
     desc = (weather_list[0] or {}).get("description", "") or ""
-    temp = (data.get("main") or {}).get("feels_like")
+    feels_like = (data.get("main") or {}).get("feels_like")
     wind = (data.get("wind") or {}).get("speed")
 
     if DEBUG_LIVE:
-        print("[WX]", city, "main:", main, "desc:", desc, "temp:", temp, "wind:", wind)
+        print("[WX]", city, "main:", main, "desc:", desc, "feels_like:", feels_like, "wind:", wind)
 
     tips: list[str] = []
     m = main.lower()
-    if m in {"rain", "thunderstorm", "drizzle"}:
+    d = desc.lower()
+
+    # Weather conditions (more forgiving)
+    if m in {"rain", "thunderstorm", "drizzle"} or "rain" in d or "shower" in d:
         tips.append("Rain expected—carry a raincoat; waterproof your devices.")
     if m == "snow":
         tips.append("Snow/ice risk—allow extra travel time and wear proper shoes.")
-    if isinstance(temp, (int, float)) and temp >= 35:
+    if isinstance(feels_like, (int, float)) and feels_like >= 32:   # was 35
         tips.append("High heat—hydrate often and avoid midday sun.")
-    if isinstance(wind, (int, float)) and wind >= 12:  # ~40+ km/h
+    if isinstance(wind, (int, float)) and wind >= 10:               # was 12
         tips.append("Strong wind—secure hats/umbrellas near viewpoints/coast.")
 
     return tips[0] if tips else None
-
 
 
 async def travel_advisory(country_code: str) -> Optional[Tuple[float, str]]:
@@ -258,3 +275,12 @@ async def travel_advisory(country_code: str) -> Optional[Tuple[float, str]]:
     except Exception as e:
         if DEBUG_LIVE: print("[TA] error:", e)
         return None
+
+
+# =========================
+# GENERIC FALLBACK TIP (optional)
+# =========================
+
+def fallback_generic_tip() -> str:
+    """Used by safety_policy when it wants to guarantee at least one tip, or when ALWAYS_TIP=1."""
+    return "No major weather/advisory issues detected—follow normal safety precautions and use verified providers."
