@@ -10,7 +10,6 @@ Tourism AI is your **next-gen travel companion**.
 Instead of scrolling through dozens of blogs, reviews, and apps, this system uses **specialized AI agents** that collaborate to design **personalized itineraries**—optimizing attractions, budgets, safety, inclusivity, and accessibility.  
 
 Whether you're a family planning a vacation, a solo traveler, or a travel agency offering tailored packages, Tourism AI provides **efficient, reliable, and transparent travel solutions**.  
-
 ---
 
 ## 🤖 Agents in Action  
@@ -90,5 +89,12 @@ requirements:
 - **LLM:** Gemini API  
 - **Framework:** AutoGen (multi-agent orchestration)  
 - **Language:** Python  
-- **Environment:** Virtualenv  
+- **Environment:** Virtualenv
+  
+---
+
+## System Diagram
+
+<img width="758" height="1762" alt="diagram-export-9-28-2025-2_14_56-PM" src="https://github.com/user-attachments/assets/adb35a96-c4b7-43b3-af15-c6e3178e9d1a" />
+
 - **Deployment-ready:** Can be scaled via Docker / Cloud (future scope)  
