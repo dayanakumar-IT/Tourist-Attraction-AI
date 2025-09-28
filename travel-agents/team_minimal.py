@@ -246,7 +246,7 @@ def print_pretty(final_dict: dict):
                 print(f"   - {n}")
         print("\n--------------------------------\n")
 
-# ---------- Agents (kept for structure) ----------
+# Agents
 flight_agent = AssistantAgent(
     name="flight_agent",
     description="Finds flight options (top-3 per direction via Duffel).",
