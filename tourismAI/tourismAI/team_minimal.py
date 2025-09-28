@@ -227,10 +227,22 @@ async def main():
     print("\n[Fallback] Running ScamWatcher -> Safety/Policy directly...\n")
 
     payload = PlannerPayload.model_validate(example_payload)
+
+    # Small debug line so you can verify keys & query:
+    ow_has_key = bool(os.getenv("OPENWEATHER_KEY"))
+    print(f"[DEBUG] OpenWeather key loaded: {ow_has_key} | City query: {payload.city},{payload.country or ''}")
+
     checks = await score_payload_async(payload)                 # ✅ async version
     report = await merge_and_explain_async(payload, checks)     # ✅ async version
 
-    print("SAFETY_REPORT_JSON:\n", report.model_dump_json(indent=2))
+    # Inject a fallback safety tip if none were returned (so you ALWAYS see something)
+    report_dict = report.model_dump()
+    if not report_dict.get("safety_tips"):
+        report_dict["safety_tips"] = [
+            "No major issues reported—follow normal travel safety precautions (keep valuables secure, use verified providers)."
+        ]
+
+    print("SAFETY_REPORT_JSON:\n", json.dumps(report_dict, indent=2))
 
     print("\n============================ DONE ============================\n")
 
