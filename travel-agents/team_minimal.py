@@ -1,5 +1,4 @@
-# ---- load .env BEFORE anything else so providers see the keys ----
-from dotenv import load_dotenv
+from dotenv import load_dotenv 
 load_dotenv()
 
 import os, sys, asyncio, json, re
