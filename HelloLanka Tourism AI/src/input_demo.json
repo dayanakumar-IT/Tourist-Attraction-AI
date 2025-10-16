@@ -1,0 +1,12 @@
+{
+  "start_location": "Colombo, Sri Lanka",
+  "destinations": ["Galle", "Unawatuna", "Mirissa"],
+  "free_text_interest": "near colombo, fun arcades / date ideas",
+  "start_date": "2025-12-20",
+  "trip_days": 5,
+  "party": { "type": "family", "count": 5, "notes": "2 elderly; peanut allergy" },
+  "budget": { "amount": 800, "currency": "USD" },
+  "accommodation": { "needed": true, "types": ["resort", "villa"] },
+  "experiences": ["beach", "adventure"],
+  "traveler_profile_override": null
+}
