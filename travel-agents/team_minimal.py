@@ -12,7 +12,7 @@ from schemas import (
 from nlp import parse_trip_free_text
 from combo import make_combos
 
-# Agents (kept for structure)
+# Agents 
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
 from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
@@ -246,7 +246,9 @@ def print_pretty(final_dict: dict):
                 print(f"   - {n}")
         print("\n--------------------------------\n")
 
-# ---------- Agents (kept for structure) ----------
+# ---------- Agents 
+# 
+#  ----------
 flight_agent = AssistantAgent(
     name="flight_agent",
     description="Finds flight options (top-3 per direction via Duffel).",
