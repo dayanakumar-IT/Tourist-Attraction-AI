@@ -5,6 +5,7 @@ from datetime import date, time
 from decimal import Decimal
 from typing import List, Dict, Optional, Literal
 from pydantic import BaseModel, Field, constr, conint, conlist
+from pydantic.config import ConfigDict
 
 # ---------- INPUT from "frontend" ----------
 
@@ -17,7 +18,7 @@ class Party(BaseModel):
         extra = "forbid"
 
 
-CurrencyCode = constr(regex=r"^[A-Z]{3}$")  # e.g., USD, LKR, EUR
+CurrencyCode = constr(pattern=r"^[A-Z]{3}$")  # e.g., USD, LKR, EUR
 
 class Budget(BaseModel):
     amount: Decimal = Field(gt=0)   # use Decimal for money; ok to switch back to float if you prefer
@@ -92,9 +93,7 @@ class TravelLeg(BaseModel):
     eta_min: Optional[conint(ge=0)] = None
     km: Optional[float] = None
 
-    class Config:
-        allow_population_by_field_name = True
-        extra = "forbid"
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class DayPlan(BaseModel):
@@ -132,7 +131,7 @@ class Itinerary(BaseModel):
 
 
 class ItineraryBundle(BaseModel):
-    plans: conlist(Itinerary, min_items=1)
+    plans: conlist(Itinerary, min_length=1)
 
     class Config:
         extra = "forbid"

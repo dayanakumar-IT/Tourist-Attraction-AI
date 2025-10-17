@@ -28,9 +28,18 @@ class BudgetWeatherAgent:
         for itin in drafts:
             # Weather pass + comfort tweaks
             for day in itin.daily_plan:
-                gc = geocode_nominatim(day.base_city) or geocode_nominatim(req.start_location)
-                w = forecast_hint(gc["lat"], gc["lon"], dt.date.fromisoformat(day.date)) if gc else {"summary":"unknown","rain_mm":0}
-                day.weather_hint = w["summary"]
+                try:
+                    gc = geocode_nominatim(day.base_city)
+                except Exception:
+                    try:
+                        gc = geocode_nominatim(req.start_location)
+                    except Exception:
+                        gc = None
+                try:
+                    w = forecast_hint(gc["lat"], gc["lon"], dt.date.fromisoformat(day.date)) if gc else {"summary":"unknown"}
+                except Exception:
+                    w = {"summary": "unknown"}
+                day.weather_hint = w.get("summary", "unknown")
                 if w["summary"] == "rainy" and day.activities:
                     # put spa/wellness earlier for rainy days
                     day.activities.sort(key=lambda a: 0 if a.kind in ("spa","wellness") else 1)

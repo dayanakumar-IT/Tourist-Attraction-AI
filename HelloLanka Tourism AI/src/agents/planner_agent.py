@@ -84,10 +84,31 @@ def _blend_day(
                         lat, lon = c_lat, c_lon
                         break
         else:
-            pois = search_radius(lat, lon, kinds=kinds, radius=6000, limit=20)
+            # primary: kinds-based
+            try:
+                pois = search_radius(lat, lon, kinds=kinds, radius=8000, limit=25)
+            except Exception:
+                pois = []
+            # fallback: general filtered by theme keyword if empty
+            if not pois:
+                try:
+                    kw = t.replace("_", "|")
+                    pois = search_radius_general_filtered(lat, lon, include_name_regex=kw, radius=12000, limit=30)
+                except Exception:
+                    pois = []
 
         if not pois:
-            raise RuntimeError(f"No live POIs for theme '{t}' near {base_city} ({lat},{lon})")
+            # last resort placeholder so planner never crashes
+            acts.append(Activity(
+                name=f"{t.title()} activity (placeholder)",
+                kind=t,
+                start=slots[min(len(acts),len(slots)-1)][0],
+                duration_min=90,
+                poi_id=None,
+                lat=lat,
+                lon=lon,
+            ))
+            continue
 
         p = pois[0]
         acts.append(Activity(
@@ -101,8 +122,12 @@ def _blend_day(
         ))
     return acts
 
-def _dates(start_date: str, n: int) -> List[str]:
-    d0 = dt.date.fromisoformat(start_date)
+def _dates(start_date, n: int) -> List[str]:
+    # accept datetime.date or ISO string
+    if isinstance(start_date, dt.date):
+        d0 = start_date
+    else:
+        d0 = dt.date.fromisoformat(str(start_date))
     return [(d0 + dt.timedelta(days=i)).isoformat() for i in range(n)]
 
 class PlannerAgent:
