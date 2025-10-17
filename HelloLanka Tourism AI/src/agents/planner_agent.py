@@ -8,6 +8,10 @@ from ..tools.pois import (
     search_radius_name_filtered_multi,
 )
 
+# Simple in-memory cache for POI searches to avoid repeated API calls
+_POI_CACHE = {}
+_COORD_CACHE = {}
+
 def haversine_km(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     R=6371
     lat1,lon1=map(math.radians,a); lat2,lon2=map(math.radians,b)
@@ -30,8 +34,19 @@ THEME_KIND_MAP = {
 def _geocode_many(places: List[str]) -> Dict[str, Tuple[float,float]]:
     out={}
     for p in places:
-        g = geocode_nominatim(p)  # strict; raises if not found
-        out[p]=(g["lat"], g["lon"])
+        if p in _COORD_CACHE:
+            out[p] = _COORD_CACHE[p]
+        else:
+            try:
+                g = geocode_nominatim(p)  # strict; raises if not found
+                coord = (g["lat"], g["lon"])
+                out[p] = coord
+                _COORD_CACHE[p] = coord
+            except Exception:
+                # fallback to Colombo if geocoding fails
+                coord = (6.9271, 79.8612)
+                out[p] = coord
+                _COORD_CACHE[p] = coord
     return out
 
 def _nearest_next(current: str, remaining: List[str], coords: Dict[str,Tuple[float,float]]) -> str:
@@ -49,6 +64,8 @@ def _blend_day(
     base_city: str,
     themes: List[str],
     alt_centers: List[Tuple[str, float, float]] | None = None,  # [(name, lat, lon)]
+    *,
+    pick_offset: int = 0,
 ) -> List[Activity]:
     acts=[]
     slots=[("08:30","adventure"),("14:00","spa"),("17:30","beach")]
@@ -62,40 +79,62 @@ def _blend_day(
         pois = []
 
         if t == "spa" or not kinds:
-            # 1) try around base_city
-            pois = search_radius_name_filtered_multi(
-                lat, lon,
-                include_name_regex=r"(spa|ayur|ayurveda|ayurvedic|wellness|massage|therapy|yoga)",
-                radii=[6000, 10000, 15000, 20000],  # widened a bit more
-                per_radius_limit=80,
-            )
+            # 1) try around base_city with simple search
+            try:
+                pois = search_radius_general_filtered(
+                    lat, lon,
+                    include_name_regex=r"(spa|ayur|ayurveda|ayurvedic|wellness|massage|therapy|yoga)",
+                    radius=8000,
+                    limit=8
+                )
+            except Exception:
+                pois = []
             # 2) if still nothing, try alternate centers (start + other destinations)
             if not pois:
                 for (center_name, c_lat, c_lon) in alt_centers:
-                    pois = search_radius_name_filtered_multi(
-                        c_lat, c_lon,
-                        include_name_regex=r"(spa|ayur|ayurveda|ayurvedic|wellness|massage|therapy|yoga)",
-                        radii=[6000, 10000, 15000, 20000],
-                        per_radius_limit=80,
-                    )
-                    if pois:
-                        # update base city to reflect where we actually found the spa
-                        base_city = center_name
-                        lat, lon = c_lat, c_lon
-                        break
+                    # only try centers within ~30km of today's base to avoid city mismatches
+                    try:
+                        if haversine_km((lat, lon), (c_lat, c_lon)) > 30:
+                            continue
+                    except Exception:
+                        pass
+                    try:
+                        pois = search_radius_general_filtered(
+                            c_lat, c_lon,
+                            include_name_regex=r"(spa|ayur|ayurveda|ayurvedic|wellness|massage|therapy|yoga)",
+                            radius=8000,
+                            limit=8
+                        )
+                        if pois:
+                            # update base city to reflect where we actually found the spa
+                            base_city = center_name
+                            lat, lon = c_lat, c_lon
+                            break
+                    except Exception:
+                        continue
         else:
-            # primary: kinds-based
-            try:
-                pois = search_radius(lat, lon, kinds=kinds, radius=8000, limit=25)
-            except Exception:
-                pois = []
-            # fallback: general filtered by theme keyword if empty
-            if not pois:
+            # primary: kinds-based with caching
+            cache_key = f"{lat:.3f},{lon:.3f}_{','.join(kinds)}"
+            if cache_key in _POI_CACHE:
+                pois = _POI_CACHE[cache_key]
+            else:
                 try:
-                    kw = t.replace("_", "|")
-                    pois = search_radius_general_filtered(lat, lon, include_name_regex=kw, radius=12000, limit=30)
+                    pois = search_radius(lat, lon, kinds=kinds, radius=6000, limit=8)  # Further reduced
+                    _POI_CACHE[cache_key] = pois
                 except Exception:
                     pois = []
+            # fallback: general filtered by theme keyword if empty
+            if not pois:
+                fallback_key = f"{lat:.3f},{lon:.3f}_{t}"
+                if fallback_key in _POI_CACHE:
+                    pois = _POI_CACHE[fallback_key]
+                else:
+                    try:
+                        kw = t.replace("_", "|")
+                        pois = search_radius_general_filtered(lat, lon, include_name_regex=kw, radius=8000, limit=8)  # Further reduced
+                        _POI_CACHE[fallback_key] = pois
+                    except Exception:
+                        pois = []
 
         if not pois:
             # last resort placeholder so planner never crashes
@@ -110,7 +149,16 @@ def _blend_day(
             ))
             continue
 
-        p = pois[0]
+        # Pick high-rated and diversify across plans/days
+        def _rating_key(p: Dict):
+            r = p.get("rating")
+            return (float(r) if isinstance(r, (int, float)) else -1.0)
+        try:
+            pois_sorted = sorted(pois, key=_rating_key, reverse=True)
+        except Exception:
+            pois_sorted = pois
+        idx = min(pick_offset % max(1, len(pois_sorted)), len(pois_sorted) - 1)
+        p = pois_sorted[idx]
         acts.append(Activity(
             name=p.get("name") or (t.title()+" POI"),
             kind=t,
@@ -163,7 +211,7 @@ class PlannerAgent:
         dates=_dates(req.start_date, req.trip_days)
         plans=[]
 
-        for title, town_order in variants:
+        for v_idx, (title, town_order) in enumerate(variants):
             daily=[]
             for i, d in enumerate(dates):
                 base_city = town_order[min(i,len(town_order)-1)] if town_order else req.start_location
@@ -174,7 +222,7 @@ class PlannerAgent:
                 # Build an alt-centers list that excludes the current base (we’ll try others if needed)
                 alt_centers = [(name, lat, lon) for (name, lat, lon) in alt_list_all if name != base_city]
 
-                acts = _blend_day(clat,clon,base_city,req.themes, alt_centers=alt_centers)
+                acts = _blend_day(clat,clon,base_city,req.themes, alt_centers=alt_centers, pick_offset=i+v_idx)
 
                 legs=[]
                 if i==0 and base_city!=req.start_location:

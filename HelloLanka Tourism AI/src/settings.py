@@ -20,7 +20,7 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")   # optional
 USER_AGENT   = "HelloLanka-TourismAI/0.1 (contact: you@example.com)"
 
 # timeouts
-HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "15"))
+HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "8"))  # Reduced from 15 to 8 seconds
 
 # --- App defaults ---
 BASE_CCY = "LKR"  # internal math currency

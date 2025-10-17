@@ -151,7 +151,7 @@ def _gp_call(
         if not pagetoken:
             break
         # Next page tokens need a short delay to become valid
-        time.sleep(2)
+        time.sleep(0.5)  # Reduced from 2 seconds
 
     return collected
 

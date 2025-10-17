@@ -2,7 +2,7 @@ import argparse
 import json
 import sys
 
-from .graph_pipeline import run_graph
+from .agent_graph import run_multiagent
 
 
 def _ascii(s: str) -> str:
@@ -25,7 +25,7 @@ def main():
 		print(f"Failed to read input JSON: {e}")
 		sys.exit(1)
 
-    result = run_graph(payload, trace=args.trace)
+	result = run_multiagent(payload, trace=args.trace)
 
 	print("\n=== RESULT (3 plans max) ===")
 	for i, plan in enumerate(result.get("plans", [])[:3], 1):
