@@ -1,7 +1,7 @@
 {
   "start_location": "Colombo, Sri Lanka",
-  "destinations": ["Galle", "Unawatuna", "Mirissa"],
-  "free_text_interest": "Beach, spa and good food",
+  "destinations": ["Jaffna", "Mannar", "Trincomalee"],
+  "free_text_interest": "Temple, Baech and good food",
   "start_date": "2025-12-20",
   "trip_days": 5,
   "party": { "type": "family", "count": 5, "notes": "2 elderly; peanut allergy" },
