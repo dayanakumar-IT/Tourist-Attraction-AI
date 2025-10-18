@@ -14,7 +14,7 @@ GEMINI_BASE    = os.getenv("GEMINI_BASE", "https://generativelanguage.googleapis
 # --- External data APIs ---
 # external keys
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")   # optional
+# OPENWEATHER_API_KEY removed - now using Google Maps Platform Weather API
 
 # --- Net / etiquette ---
 USER_AGENT   = "HelloLanka-TourismAI/0.1 (contact: you@example.com)"

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, time
 from decimal import Decimal
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Any
 from pydantic import BaseModel, Field, constr, conint, conlist
 from pydantic.config import ConfigDict
 
@@ -66,7 +66,7 @@ class TripNormalized(TripRequest):
 # ---------- ITINERARY STRUCTS ----------
 
 # If you prefer a stricter enum:
-WeatherHint = Literal["clear", "rainy", "unknown"]
+WeatherHint = Literal["clear", "rainy", "unknown", "partly_cloudy", "sunny", "cloudy", "light_rain"]
 
 class Activity(BaseModel):
     name: str
@@ -82,8 +82,12 @@ class Activity(BaseModel):
     rating: Optional[float] = None
     user_ratings_total: Optional[int] = None
 
-    class Config:
-        extra = "forbid"
+    # Enhanced data from WeatherFoodAgent
+    weather_info: Optional[Dict[str, Any]] = None
+    nearby_restaurants: Optional[List[Dict[str, Any]]] = None
+    timing_info: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class TravelLeg(BaseModel):
@@ -92,6 +96,8 @@ class TravelLeg(BaseModel):
     to: str
     eta_min: Optional[conint(ge=0)] = None
     km: Optional[float] = None
+    estimated_cost: Optional[int] = None
+    cost_currency: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
