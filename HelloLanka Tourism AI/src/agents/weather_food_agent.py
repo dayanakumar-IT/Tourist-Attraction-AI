@@ -9,8 +9,8 @@ import json
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime
-from ..settings import GOOGLE_PLACES_API_KEY, HTTP_TIMEOUT
-from ..contracts import Activity, DayPlan
+from settings import GOOGLE_PLACES_API_KEY, HTTP_TIMEOUT
+from contracts import Activity, DayPlan
 
 
 def _call_google_places(params: Dict[str, Any]) -> Dict[str, Any]:

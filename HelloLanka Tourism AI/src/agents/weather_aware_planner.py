@@ -9,7 +9,7 @@ This agent intelligently adapts activities based on weather conditions.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ..contracts import Activity, DayPlan
+from contracts import Activity, DayPlan
 from .weather_food_agent import get_weather_forecast
 
 

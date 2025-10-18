@@ -1,6 +1,6 @@
 import json, requests
 from typing import List, Tuple
-from ..settings import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE
+from settings import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE
 
 CONTROLLED = ["beach","spa","adventure","culture","nature","food","wellness","wildlife","photography","mixed_highlights"]
 

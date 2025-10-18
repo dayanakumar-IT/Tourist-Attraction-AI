@@ -1,7 +1,7 @@
 # src/tools/geocode.py
 import requests
 from typing import Dict
-from ..settings import USER_AGENT, HTTP_TIMEOUT
+from settings import USER_AGENT, HTTP_TIMEOUT
 
 def geocode_nominatim(query: str) -> Dict[str, float]:
     r = requests.get(

@@ -6,8 +6,8 @@ import json
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import time, timedelta
-from ..settings import GOOGLE_PLACES_API_KEY, HTTP_TIMEOUT
-from ..contracts import TravelLeg, Activity
+from settings import GOOGLE_PLACES_API_KEY, HTTP_TIMEOUT
+from contracts import TravelLeg, Activity
 
 
 def _call_google_maps_api(params: Dict[str, Any], endpoint: str = "directions") -> Dict[str, Any]:

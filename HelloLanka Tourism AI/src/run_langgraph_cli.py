@@ -2,7 +2,7 @@ import argparse
 import json
 import sys
 
-from .agent_graph import run_multiagent
+from agent_graph import run_multiagent
 
 
 def _ascii(s: str) -> str:

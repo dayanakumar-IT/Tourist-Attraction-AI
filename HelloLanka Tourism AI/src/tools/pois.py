@@ -23,7 +23,7 @@ import requests
 from typing import List, Dict, Any, Optional, Tuple, Set
 
 # ---- settings (expects you already load .env in src/settings.py) ----
-from ..settings import (
+from settings import (
     GOOGLE_PLACES_API_KEY,
     HTTP_TIMEOUT,
     GEMINI_API_KEY,
