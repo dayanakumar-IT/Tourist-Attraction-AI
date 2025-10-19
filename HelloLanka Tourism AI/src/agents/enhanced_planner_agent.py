@@ -9,6 +9,7 @@ from tools.pois import (
 )
 from tools.unsplash_images import get_sri_lanka_place_image
 from tools.sri_lanka_places import get_real_sri_lanka_places
+from tools.sri_lanka_coordinates import get_coordinates, calculate_distance, get_travel_time
 from settings import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE
 import json
 import requests
@@ -207,7 +208,7 @@ class EnhancedPlannerAgent:
         return places[:3]  # Return top 3 places
     
     def _create_explainable_itineraries(self, req: TripNormalized, place_suggestions: Dict[str, List[Dict[str, Any]]]) -> List[Itinerary]:
-        """Create itineraries with explainable AI reasoning."""
+        """Create itineraries with explainable AI reasoning and multiple destinations."""
         itineraries = []
         
         # Create different itinerary variants
@@ -221,20 +222,31 @@ class EnhancedPlannerAgent:
             daily_plans = []
             dates = self._get_dates(req.start_date, req.trip_days)
             
+            # Plan route through multiple destinations
+            route_plan = self._plan_multi_destination_route(req)
+            
             for i, date in enumerate(dates):
-                day_key = f"day_{i+1}"
-                day_suggestions = place_suggestions.get(day_key, {})
-                
-                base_city = day_suggestions.get("base_city", req.start_location)
-                places = day_suggestions.get("places", [])
+                # Determine which destination to visit on this day
+                if i < len(route_plan):
+                    base_city = route_plan[i]["city"]
+                    day_suggestions = place_suggestions.get(f"day_{i+1}", {})
+                    places = day_suggestions.get("places", [])
+                else:
+                    # If more days than destinations, stay in last destination
+                    base_city = route_plan[-1]["city"] if route_plan else req.start_location
+                    places = []
                 
                 # Create activities from LLM suggestions
-                activities = self._create_activities_from_suggestions(places, req.party.elderly)
+                activities = self._create_activities_from_suggestions(places, req.party.elderly, base_city)
                 
-                # Add travel legs if needed
+                # Add travel legs with real travel times
                 travel_legs = []
                 if i == 0 and base_city != req.start_location:
-                    travel_legs = self._create_travel_leg(req.start_location, base_city)
+                    # Travel from start to first destination
+                    travel_legs = self._create_travel_leg_with_time(req.start_location, base_city)
+                elif i > 0 and base_city != route_plan[i-1]["city"]:
+                    # Travel between destinations
+                    travel_legs = self._create_travel_leg_with_time(route_plan[i-1]["city"], base_city)
                 
                 daily_plan = DayPlan(
                     date=date,
@@ -246,11 +258,12 @@ class EnhancedPlannerAgent:
                 
                 daily_plans.append(daily_plan)
             
-            # Create itinerary
+            # Create itinerary with proper destination order
+            destination_names = [stop["city"] for stop in route_plan]
             itinerary = Itinerary(
-                title=f"{variant_name} – {req.destinations[0] if req.destinations else req.start_location} & Beyond",
+                title=f"{variant_name} – {' → '.join(destination_names)}",
                 theme_mix=req.themes,
-                town_order=req.destinations,
+                town_order=destination_names,
                 daily_plan=daily_plans,
                 budget_summary=BudgetSummary(currency=req.budget.currency, breakdown={})
             )
@@ -259,7 +272,99 @@ class EnhancedPlannerAgent:
         
         return itineraries
     
-    def _create_activities_from_suggestions(self, places: List[Dict[str, Any]], elderly_friendly: bool) -> List[Activity]:
+    def _plan_multi_destination_route(self, req: TripNormalized) -> List[Dict[str, Any]]:
+        """Plan optimal route through multiple destinations."""
+        if not req.destinations:
+            return [{"city": req.start_location, "day": 1}]
+        
+        # Calculate distances and plan optimal route
+        all_places = [req.start_location] + req.destinations
+        route = []
+        
+        current = req.start_location
+        remaining = req.destinations.copy()
+        
+        # Greedy algorithm to find shortest route
+        for day in range(min(req.trip_days, len(req.destinations) + 1)):
+            if day == 0 and req.destinations:
+                # First day: go to nearest destination
+                nearest = min(remaining, key=lambda x: calculate_distance(current, x))
+                route.append({"city": nearest, "day": day + 1})
+                remaining.remove(nearest)
+                current = nearest
+            elif remaining:
+                # Subsequent days: go to next nearest destination
+                nearest = min(remaining, key=lambda x: calculate_distance(current, x))
+                route.append({"city": nearest, "day": day + 1})
+                remaining.remove(nearest)
+                current = nearest
+            else:
+                # Stay in last destination
+                route.append({"city": current, "day": day + 1})
+        
+        return route
+    
+    def _create_travel_leg_with_time(self, from_city: str, to_city: str) -> List[TravelLeg]:
+        """Create travel leg with real travel time calculation."""
+        distance = calculate_distance(from_city, to_city)
+        
+        # Get travel time for different modes
+        car_time = get_travel_time(from_city, to_city, "car")
+        train_time = get_travel_time(from_city, to_city, "train")
+        bus_time = get_travel_time(from_city, to_city, "bus")
+        
+        # Create multiple transport options
+        legs = []
+        
+        # Car option
+        legs.append(TravelLeg(
+            mode="car",
+            from_=from_city,
+            to=to_city,
+            eta_min=car_time,
+            km=round(distance, 1),
+            estimated_cost=int(distance * 15),  # LKR per km
+            cost_currency="LKR",
+            explanation=f"Direct drive from {from_city} to {to_city} - most flexible option",
+            scenic_rating=7,
+            comfort_level="high",
+            elderly_friendly=True
+        ))
+        
+        # Train option (if distance > 50km)
+        if distance > 50:
+            legs.append(TravelLeg(
+                mode="train",
+                from_=from_city,
+                to=to_city,
+                eta_min=train_time,
+                km=round(distance, 1),
+                estimated_cost=int(distance * 2),
+                cost_currency="LKR",
+                explanation=f"Scenic train journey from {from_city} to {to_city} - cultural experience",
+                scenic_rating=9,
+                comfort_level="medium",
+                elderly_friendly=True
+            ))
+        
+        # Bus option
+        legs.append(TravelLeg(
+            mode="bus",
+            from_=from_city,
+            to=to_city,
+            eta_min=bus_time,
+            km=round(distance, 1),
+            estimated_cost=int(distance * 1.5),
+            cost_currency="LKR",
+            explanation=f"Local bus from {from_city} to {to_city} - budget-friendly option",
+            scenic_rating=6,
+            comfort_level="low",
+            elderly_friendly=False
+        ))
+        
+        return legs
+
+    def _create_activities_from_suggestions(self, places: List[Dict[str, Any]], elderly_friendly: bool, base_city: str) -> List[Activity]:
         """Create Activity objects from LLM place suggestions."""
         activities = []
         
@@ -272,14 +377,17 @@ class EnhancedPlannerAgent:
             
             start_time = start_times[min(i, len(start_times) - 1)]
             
+            # Get real coordinates for the place
+            lat, lon = get_coordinates(place["name"])
+            
             activity = Activity(
                 name=place["name"],
                 kind=place["type"],
                 start=start_time,
                 duration_min=120,  # 2 hours default
                 poi_id=None,
-                lat=None,
-                lon=None
+                lat=lat,
+                lon=lon
             )
             
             # Add explainable AI data
