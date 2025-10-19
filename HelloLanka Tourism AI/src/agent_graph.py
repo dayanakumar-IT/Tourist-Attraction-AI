@@ -13,6 +13,10 @@ from contracts import TripRequest, TripNormalized, ItineraryBundle
 from agents.pre_agent import normalize_themes, infer_traveler_profile
 from agents.planner_agent import PlannerAgent
 from agents.weather_aware_planner import WeatherAwarePlanner
+from agents.weather_food_agent import WeatherFoodAgent
+from agents.transport_agent import TransportAgent
+from agents.cultural_tips_agent import CulturalTipsAgent
+from agents.train_booking_agent import TrainBookingAgent
 
 
 def _ensure_keys():
@@ -280,6 +284,48 @@ def run_multiagent(payload: Dict[str, Any], *, trace: bool = False) -> Dict[str,
 			print("Weather adaptation successful")
 		except Exception as e:
 			print(f"Weather adaptation failed: {e}")
+		
+		print("Adding cultural tips and safety advice...")
+		try:
+			cultural_agent = CulturalTipsAgent()
+			enhanced_plans = []
+			for plan in data.get("plans", []):
+				enhanced_daily_plans = []
+				for day_plan in plan.get("daily_plan", []):
+					enhanced_day = cultural_agent.enhance_activities_with_cultural_tips(day_plan)
+					enhanced_daily_plans.append(enhanced_day)
+				plan["daily_plan"] = enhanced_daily_plans
+				enhanced_plans.append(plan)
+			data["plans"] = enhanced_plans
+			print("Cultural tips enhancement successful")
+		except Exception as e:
+			print(f"Cultural tips enhancement failed: {e}")
+		
+		print("Adding train booking options...")
+		try:
+			train_agent = TrainBookingAgent()
+			enhanced_plans = []
+			for plan in data.get("plans", []):
+				enhanced_daily_plans = []
+				for day_plan in plan.get("daily_plan", []):
+					# Add train options to travel legs
+					enhanced_travel_legs = []
+					for leg in day_plan.get("travel_legs", []):
+						from_city = leg.get("from", "").lower()
+						to_city = leg.get("to", "").lower()
+						if from_city and to_city:
+							enhanced_legs = train_agent.enhance_transport_with_train_options([leg], from_city, to_city)
+							enhanced_travel_legs.extend(enhanced_legs)
+						else:
+							enhanced_travel_legs.append(leg)
+					day_plan["travel_legs"] = enhanced_travel_legs
+					enhanced_daily_plans.append(day_plan)
+				plan["daily_plan"] = enhanced_daily_plans
+				enhanced_plans.append(plan)
+			data["plans"] = enhanced_plans
+			print("Train booking enhancement successful")
+		except Exception as e:
+			print(f"Train booking enhancement failed: {e}")
 		
 		print("Validating final result...")
 		try:

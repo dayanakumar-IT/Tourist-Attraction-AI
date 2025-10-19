@@ -86,18 +86,46 @@ class Activity(BaseModel):
     weather_info: Optional[Dict[str, Any]] = None
     nearby_restaurants: Optional[List[Dict[str, Any]]] = None
     timing_info: Optional[Dict[str, Any]] = None
+    
+    # Image data from Unsplash
+    image_url: Optional[str] = None
+    image_alt: Optional[str] = None
+    photographer: Optional[str] = None
+    photographer_url: Optional[str] = None
+    
+    # Cultural and safety tips
+    cultural_tips: Optional[Dict[str, Any]] = None
+    safety_tips: Optional[List[str]] = None
+    local_etiquette: Optional[List[str]] = None
+    special_notes: Optional[str] = None
+    
+    # Real data integration
+    price_range: Optional[str] = None
+    opening_hours: Optional[str] = None
+    contact_info: Optional[Dict[str, str]] = None
+    explanation: Optional[str] = None  # Explainable AI
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class TravelLeg(BaseModel):
-    mode: Literal["car", "train", "walk", "tuk"]  # add "bus" if you plan to support it
+    mode: Literal["car", "train", "walk", "tuk", "bus"]  # Added bus option
     from_: str = Field(alias="from")
     to: str
     eta_min: Optional[conint(ge=0)] = None
     km: Optional[float] = None
     estimated_cost: Optional[int] = None
     cost_currency: Optional[str] = None
+    
+    # Train-specific fields
+    scenic_rating: Optional[int] = None
+    booking_url: Optional[str] = None
+    available_classes: Optional[List[str]] = None
+    frequency: Optional[str] = None
+    recommendations: Optional[List[str]] = None
+    
+    # Explainable AI
+    explanation: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

@@ -130,15 +130,56 @@ def get_nearby_restaurants(location: str, activity_name: str, cuisine_preference
 
 
 def get_best_visit_time(activity_name: str, location: str) -> Dict[str, Any]:
-    """Lightweight heuristic timing; avoids extra APIs."""
-    return {
-        "activity": activity_name,
-        "location": location,
-        "best_time": "09:00-17:00",
-        "peak_hours": "10:00-16:00",
-        "quiet_hours": "08:00-10:00, 17:00-19:00",
-        "notes": "Check local hours",
-    }
+    """Enhanced timing recommendations based on activity type."""
+    activity_lower = activity_name.lower()
+    
+    # Beach activities
+    if any(word in activity_lower for word in ["beach", "coast", "sea", "ocean", "whale", "diving"]):
+        return {
+            "activity": activity_name,
+            "location": location,
+            "best_time": "06:00-10:00, 16:00-19:00",
+            "peak_hours": "10:00-16:00",
+            "quiet_hours": "06:00-08:00, 18:00-19:00",
+            "notes": "Early morning for calm seas, evening for sunset views. Avoid peak sun hours.",
+            "safety_tips": "Check sea conditions, use sunscreen, stay hydrated"
+        }
+    
+    # Cultural/historical sites
+    elif any(word in activity_lower for word in ["fort", "temple", "museum", "palace", "church", "monument"]):
+        return {
+            "activity": activity_name,
+            "location": location,
+            "best_time": "09:00-17:00",
+            "peak_hours": "10:00-16:00",
+            "quiet_hours": "08:00-10:00, 17:00-18:00",
+            "notes": "Standard opening hours. Check specific site hours.",
+            "safety_tips": "Dress modestly for religious sites, respect local customs"
+        }
+    
+    # Nature/wildlife activities
+    elif any(word in activity_lower for word in ["park", "forest", "safari", "wildlife", "nature", "hiking"]):
+        return {
+            "activity": activity_name,
+            "location": location,
+            "best_time": "06:00-10:00, 16:00-19:00",
+            "peak_hours": "10:00-16:00",
+            "quiet_hours": "06:00-08:00, 18:00-19:00",
+            "notes": "Best wildlife viewing times. Early morning for bird watching.",
+            "safety_tips": "Bring insect repellent, water, and follow park rules"
+        }
+    
+    # General activities
+    else:
+        return {
+            "activity": activity_name,
+            "location": location,
+            "best_time": "09:00-17:00",
+            "peak_hours": "10:00-16:00",
+            "quiet_hours": "08:00-10:00, 17:00-19:00",
+            "notes": "Check local hours and weather conditions",
+            "safety_tips": "Stay aware of local conditions and safety guidelines"
+        }
 
 
 class WeatherFoodAgent:
