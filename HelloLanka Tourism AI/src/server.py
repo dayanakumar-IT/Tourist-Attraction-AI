@@ -19,6 +19,10 @@ app.add_middleware(
 async def health_check():
     return {"status": "healthy", "service": "HelloLanka Tourism AI"}
 
+@app.post("/api/test")
+async def test_endpoint(data: dict):
+    return {"message": "Test successful", "received_data": data}
+
 @app.post("/api/plan")
 async def plan_trip(req: TripRequest):
     try:
@@ -32,16 +36,29 @@ async def generate_itinerary(trip_data: dict):
     try:
         # Convert frontend data to TripRequest format
         trip_request = TripRequest(
-            start_city=trip_data.get("start_city", "Colombo"),
+            start_location=trip_data.get("start_city", "Colombo"),
             destinations=trip_data.get("destinations", []),
             start_date=trip_data.get("start_date", "2025-01-01"),
             trip_days=trip_data.get("trip_days", 5),
-            budget=trip_data.get("budget", {"amount": 1000, "currency": "USD"}),
-            traveler_profile=trip_data.get("traveler_profile", {}),
-            themes=trip_data.get("themes", ["culture", "nature"])
+            party={
+                "type": trip_data.get("traveler_profile", {}).get("group_type", "couple"),
+                "count": trip_data.get("traveler_profile", {}).get("group_size", 2),
+                "notes": trip_data.get("traveler_profile", {}).get("special_requirements", "")
+            },
+            budget={
+                "amount": trip_data.get("budget", {}).get("amount", 1000),
+                "currency": trip_data.get("budget", {}).get("currency", "USD")
+            },
+            accommodation={
+                "needed": False,
+                "types": []
+            },
+            experiences=trip_data.get("themes", ["culture", "nature"])
         )
         
-        result = run_multiagent(trip_request.model_dump(), trace=False)
+        # Convert to dict with proper serialization
+        request_dict = trip_request.model_dump(mode="json")
+        result = run_multiagent(request_dict, trace=False)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

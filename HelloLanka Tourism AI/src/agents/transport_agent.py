@@ -112,62 +112,27 @@ def get_transport_cost(origin: str, destination: str, mode: str = "driving") -> 
         Dict with cost estimation
     """
     try:
-        params = {
-            "origins": origin,
-            "destinations": destination,
-            "mode": mode,
-            "units": "metric",
-            "region": "lk"  # Sri Lanka
-        }
+        # First get distance and duration
+        route_info = get_route_info(origin, destination, mode)
+        distance_km = route_info.get("distance_km", 0)
         
-        result = _call_google_maps_api(params, "distance_matrix")
-        
-        if result.get("status") != "OK" or not result.get("rows"):
-            return {
-                "origin": origin,
-                "destination": destination,
-                "mode": mode,
-                "estimated_cost": None,
-                "cost_currency": "LKR",
-                "error": "No cost data available"
-            }
-        
-        row = result["rows"][0]
-        if not row.get("elements"):
-            return {
-                "origin": origin,
-                "destination": destination,
-                "mode": mode,
-                "estimated_cost": None,
-                "cost_currency": "LKR",
-                "error": "No cost data available"
-            }
-        
-        element = row["elements"][0]
-        if element.get("status") != "OK":
-            return {
-                "origin": origin,
-                "destination": destination,
-                "mode": mode,
-                "estimated_cost": None,
-                "cost_currency": "LKR",
-                "error": "Route not found"
-            }
-        
-        # Estimate cost based on distance and mode
-        distance_km = element["distance"]["value"] / 1000
-        duration_min = element["duration"]["value"] / 60
-        
-        # Simple cost estimation (you can make this more sophisticated)
-        if mode == "driving":
-            # Rough estimate: 50 LKR per km + 100 LKR base
-            estimated_cost = int(distance_km * 50 + 100)
+        # Estimate cost based on mode and distance
+        print(f"DEBUG: Estimating cost for {mode}, distance: {distance_km} km")
+        if mode == "walking":
+            estimated_cost = 0  # Free
+        elif mode == "driving":
+            # Estimate: 50 LKR per km for fuel + 20 LKR per km for maintenance
+            estimated_cost = int(distance_km * 70)
         elif mode == "tuk":
-            # Rough estimate: 30 LKR per km + 50 LKR base
-            estimated_cost = int(distance_km * 30 + 50)
+            # Estimate: 100 LKR per km for tuk-tuk
+            estimated_cost = int(distance_km * 100)
+        elif mode == "bus":
+            # Estimate: 20 LKR per km for bus
+            estimated_cost = int(distance_km * 20)
         else:
-            # Default estimate
-            estimated_cost = int(distance_km * 40 + 75)
+            estimated_cost = int(distance_km * 50)  # Default rate
+        
+        print(f"DEBUG: Calculated cost: {estimated_cost} LKR")
         
         return {
             "origin": origin,
@@ -175,16 +140,16 @@ def get_transport_cost(origin: str, destination: str, mode: str = "driving") -> 
             "mode": mode,
             "estimated_cost": estimated_cost,
             "cost_currency": "LKR",
-            "distance_km": round(distance_km, 1),
-            "duration_min": int(duration_min)
+            "distance_km": distance_km
         }
         
     except Exception as e:
+        # Fallback cost estimation
         return {
             "origin": origin,
             "destination": destination,
             "mode": mode,
-            "estimated_cost": None,
+            "estimated_cost": 1000,  # Default fallback cost
             "cost_currency": "LKR",
             "error": str(e)
         }
@@ -303,7 +268,7 @@ class TransportAgent:
                 
                 # Get cost estimation using Google Distance Matrix
                 cost_info = get_transport_cost(current_location, destination, recommended_mode)
-                cost = cost_info.get("estimated_cost")
+                cost = cost_info.get("estimated_cost", 0)
                 
                 # Create travel leg
                 travel_leg = TravelLeg(
@@ -311,7 +276,9 @@ class TransportAgent:
                     from_=current_location,
                     to=activity.name,
                     eta_min=route_info["duration_min"],
-                    km=route_info["distance_km"]
+                    km=route_info["distance_km"],
+                    estimated_cost=cost,
+                    cost_currency=budget_currency
                 )
                 
                 # Add cost information as additional attribute
@@ -343,7 +310,7 @@ class TransportAgent:
                 
                 # Get cost estimation using Google Distance Matrix
                 cost_info = get_transport_cost(current_location, destination, recommended_mode)
-                cost = cost_info.get("estimated_cost")
+                cost = cost_info.get("estimated_cost", 0)
                 
                 # Create travel leg
                 travel_leg = TravelLeg(
@@ -351,12 +318,10 @@ class TransportAgent:
                     from_=prev_activity.name,
                     to=activity.name,
                     eta_min=route_info["duration_min"],
-                    km=route_info["distance_km"]
+                    km=route_info["distance_km"],
+                    estimated_cost=cost,
+                    cost_currency=budget_currency
                 )
-                
-                # Add cost information as additional attribute
-                travel_leg.estimated_cost = cost
-                travel_leg.cost_currency = budget_currency
                 
                 travel_legs.append(travel_leg)
         
@@ -378,32 +343,31 @@ class TransportAgent:
         enhanced_daily_plan = []
         
         for day_data in itinerary_data.get("daily_plan", []):
-            # Convert activities to Activity objects
-            activities = []
-            for act_data in day_data.get("activities", []):
-                activity = Activity(**act_data)
-                activities.append(activity)
+            # Enhance existing travel legs with cost information
+            enhanced_travel_legs = []
+            for leg_data in day_data.get("travel_legs", []):
+                # Get cost estimation for existing travel leg
+                from_place = leg_data.get("from", leg_data.get("from_", ""))
+                to_place = leg_data.get("to", "")
+                mode = leg_data.get("mode", "driving")
+                
+                if from_place and to_place:
+                    cost_info = get_transport_cost(from_place, to_place, mode)
+                    estimated_cost = cost_info.get("estimated_cost", 0)
+                    cost_currency = cost_info.get("cost_currency", budget_currency)
+                    
+                    # Enhance the existing leg with cost information
+                    enhanced_leg = leg_data.copy()
+                    enhanced_leg["estimated_cost"] = estimated_cost
+                    enhanced_leg["cost_currency"] = cost_currency
+                    enhanced_travel_legs.append(enhanced_leg)
+                else:
+                    # Keep original leg if we can't get cost info
+                    enhanced_travel_legs.append(leg_data)
             
-            # Optimize transport for the day
-            travel_legs = self.optimize_day_transport(
-                activities, 
-                day_data["base_city"], 
-                group_size, 
-                budget_currency
-            )
-            
-            # Convert travel legs to dict format with cost information
-            travel_legs_data = []
-            for leg in travel_legs:
-                leg_data = leg.model_dump(by_alias=True, mode="json")
-                # Add cost information directly to the dict
-                leg_data["estimated_cost"] = getattr(leg, 'estimated_cost', None)
-                leg_data["cost_currency"] = getattr(leg, 'cost_currency', budget_currency)
-                travel_legs_data.append(leg_data)
-            
-            # Update day data with optimized transport
+            # Update day data with enhanced transport
             enhanced_day = day_data.copy()
-            enhanced_day["travel_legs"] = travel_legs_data
+            enhanced_day["travel_legs"] = enhanced_travel_legs
             
             enhanced_daily_plan.append(enhanced_day)
         

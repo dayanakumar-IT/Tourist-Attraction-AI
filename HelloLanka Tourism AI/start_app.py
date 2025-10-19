@@ -15,7 +15,7 @@ from pathlib import Path
 def run_backend():
     """Start the FastAPI backend server"""
     print("🚀 Starting Backend API Server...")
-    os.chdir("src")
+    backend_dir = os.path.join(os.getcwd(), "src")
     try:
         subprocess.run([
             sys.executable, "-m", "uvicorn", 
@@ -23,7 +23,7 @@ def run_backend():
             "--reload", 
             "--port", "8000",
             "--host", "0.0.0.0"
-        ], check=True)
+        ], cwd=backend_dir, check=True)
     except KeyboardInterrupt:
         print("\n🛑 Backend server stopped")
     except Exception as e:
@@ -32,11 +32,11 @@ def run_backend():
 def run_frontend():
     """Start the React frontend development server"""
     print("🎨 Starting Frontend Development Server...")
-    os.chdir("sri-lanka-ai-planner")
+    frontend_dir = os.path.join(os.getcwd(), "sri-lanka-ai-planner")
     try:
         subprocess.run([
             "npm", "start"
-        ], check=True)
+        ], cwd=frontend_dir, check=True)
     except KeyboardInterrupt:
         print("\n🛑 Frontend server stopped")
     except Exception as e:
@@ -54,11 +54,10 @@ def main():
         sys.exit(1)
     
     # Check if frontend dependencies are installed
-    if not Path("sri-lanka-ai-planner/node_modules").exists():
+    frontend_dir = os.path.join(os.getcwd(), "sri-lanka-ai-planner")
+    if not Path(frontend_dir, "node_modules").exists():
         print("📦 Installing frontend dependencies...")
-        os.chdir("sri-lanka-ai-planner")
-        subprocess.run(["npm", "install"], check=True)
-        os.chdir("..")
+        subprocess.run(["npm", "install"], cwd=frontend_dir, check=True)
     
     # Start backend in a separate thread
     backend_thread = threading.Thread(target=run_backend, daemon=True)

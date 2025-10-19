@@ -7,6 +7,7 @@ from tools.pois import (
     search_radius_general_filtered,
     search_radius_name_filtered_multi,
 )
+from tools.unsplash_images import get_sri_lanka_place_image
 
 # Simple in-memory cache for POI searches to avoid repeated API calls
 _POI_CACHE = {}
@@ -18,6 +19,20 @@ def haversine_km(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     dlat,dlon=lat2-lat1,lon2-lon1
     h=math.sin(dlat/2)**2+math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
     return 2*R*math.asin(math.sqrt(h))
+
+def _add_image_to_activity(activity: Activity) -> Activity:
+    """Add image data to an activity using Unsplash API."""
+    try:
+        image_data = get_sri_lanka_place_image(activity.name)
+        if image_data:
+            # Add image data as additional attributes
+            activity.image_url = image_data["url"]
+            activity.image_alt = image_data["alt"]
+            activity.photographer = image_data["photographer"]
+            activity.photographer_url = image_data["photographer_url"]
+    except Exception as e:
+        print(f"Error adding image for {activity.name}: {e}")
+    return activity
 
 THEME_KIND_MAP = {
     "beach": ["beaches","natural","view_points"],
@@ -138,7 +153,7 @@ def _blend_day(
 
         if not pois:
             # last resort placeholder so planner never crashes
-            acts.append(Activity(
+            activity = Activity(
                 name=f"{t.title()} activity (placeholder)",
                 kind=t,
                 start=slots[min(len(acts),len(slots)-1)][0],
@@ -146,7 +161,10 @@ def _blend_day(
                 poi_id=None,
                 lat=lat,
                 lon=lon,
-            ))
+            )
+            # Add image data
+            activity = _add_image_to_activity(activity)
+            acts.append(activity)
             continue
 
         # Pick high-rated and diversify across plans/days
@@ -159,7 +177,7 @@ def _blend_day(
             pois_sorted = pois
         idx = min(pick_offset % max(1, len(pois_sorted)), len(pois_sorted) - 1)
         p = pois_sorted[idx]
-        acts.append(Activity(
+        activity = Activity(
             name=p.get("name") or (t.title()+" POI"),
             kind=t,
             start=slots[min(len(acts),len(slots)-1)][0],
@@ -167,7 +185,10 @@ def _blend_day(
             poi_id=p.get("xid"),
             lat=p.get("point",{}).get("lat"),
             lon=p.get("point",{}).get("lon"),
-        ))
+        )
+        # Add image data
+        activity = _add_image_to_activity(activity)
+        acts.append(activity)
     return acts
 
 def _dates(start_date, n: int) -> List[str]:

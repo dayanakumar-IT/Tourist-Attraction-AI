@@ -42,15 +42,21 @@ def _enhance_with_weather_food(itinerary_json: str) -> str:
 		itinerary_data = json.loads(itinerary_json)
 		weather_food_agent = WeatherFoodAgent()
 		
-		# Enhance each plan in the itinerary
-		enhanced_plans = []
-		for plan in itinerary_data.get("plans", []):
-			enhanced_plan = weather_food_agent.enhance_itinerary(plan)
-			enhanced_plans.append(enhanced_plan)
+		# Check if it's a single plan or multiple plans
+		if "plans" in itinerary_data:
+			# Multiple plans structure
+			enhanced_plans = []
+			for plan in itinerary_data.get("plans", []):
+				enhanced_plan = weather_food_agent.enhance_itinerary(plan)
+				enhanced_plans.append(enhanced_plan)
+			enhanced_bundle = {"plans": enhanced_plans}
+		else:
+			# Single plan structure - enhance directly
+			enhanced_bundle = weather_food_agent.enhance_itinerary(itinerary_data)
 		
-		enhanced_bundle = {"plans": enhanced_plans}
 		return json.dumps(enhanced_bundle)
 	except Exception as e:
+		print(f"Weather/Food enhancement error: {e}")
 		# Return original if enhancement fails
 		return itinerary_json
 
@@ -58,20 +64,34 @@ def _enhance_with_weather_food(itinerary_json: str) -> str:
 def _optimize_transport(itinerary_json: str, group_size: int = 1, budget_currency: str = "LKR") -> str:
 	"""Optimize transportation for the itinerary."""
 	try:
+		print(f"DEBUG: Optimizing transport for group_size={group_size}, currency={budget_currency}")
 		itinerary_data = json.loads(itinerary_json)
 		transport_agent = TransportAgent()
 		
-		# Optimize transport for each plan
-		optimized_plans = []
-		for plan in itinerary_data.get("plans", []):
-			optimized_plan = transport_agent.optimize_itinerary_transport(
-				plan, group_size, budget_currency
+		# Check if it's a single plan or multiple plans
+		if "plans" in itinerary_data:
+			# Multiple plans structure
+			optimized_plans = []
+			for plan in itinerary_data.get("plans", []):
+				print(f"DEBUG: Optimizing plan: {plan.get('title', 'No title')}")
+				optimized_plan = transport_agent.optimize_itinerary_transport(
+					plan, group_size, budget_currency
+				)
+				optimized_plans.append(optimized_plan)
+			optimized_bundle = {"plans": optimized_plans}
+		else:
+			# Single plan structure - optimize directly
+			print(f"DEBUG: Optimizing single plan: {itinerary_data.get('title', 'No title')}")
+			optimized_bundle = transport_agent.optimize_itinerary_transport(
+				itinerary_data, group_size, budget_currency
 			)
-			optimized_plans.append(optimized_plan)
 		
-		optimized_bundle = {"plans": optimized_plans}
+		print(f"DEBUG: Transport optimization completed")
 		return json.dumps(optimized_bundle)
 	except Exception as e:
+		print(f"Transport optimization error: {e}")
+		import traceback
+		traceback.print_exc()
 		# Return original if optimization fails
 		return itinerary_json
 
@@ -181,6 +201,7 @@ def run_multiagent(payload: Dict[str, Any], *, trace: bool = False) -> Dict[str,
 	# 4) Transport optimization step
 	group_size = payload.get("party", {}).get("count", 1)
 	budget_currency = payload.get("budget", {}).get("currency", "LKR")
+	print(f"DEBUG: Starting transport optimization with group_size={group_size}, currency={budget_currency}")
 	msg4 = (
 		f"You are a transportation specialist. Optimize transportation routes and costs for group size {group_size} and currency {budget_currency}. Use the optimize_transport tool. Return JSON only.\n" +
 		text3
@@ -193,23 +214,11 @@ def run_multiagent(payload: Dict[str, Any], *, trace: bool = False) -> Dict[str,
 		text4 = str(res4)
 	if trace:
 		print("TransportAgent LLM response:", str(text4)[:200])
-	if not (isinstance(text4, str) and text4.strip().startswith("{")):
-		text4 = _optimize_transport(text3, group_size, budget_currency)
-	
-	# Ensure we have transport data by calling the tool directly if needed
-	try:
-		transport_data = json.loads(text4)
-		if not transport_data.get("plans") or not any(
-			any("estimated_cost" in leg or "cost_currency" in leg
-				for leg in day.get("travel_legs", []))
-			for plan in transport_data.get("plans", [])
-			for day in plan.get("daily_plan", [])
-		):
-			# If no transport data, call the tool directly
-			text4 = _optimize_transport(text3, group_size, budget_currency)
-	except:
-		# If parsing fails, call the tool directly
-		text4 = _optimize_transport(text3, group_size, budget_currency)
+	print(f"DEBUG: TransportAgent response type: {type(text4)}")
+	print(f"DEBUG: TransportAgent response starts with JSON: {isinstance(text4, str) and text4.strip().startswith('{')}")
+	# Always call transport optimization to ensure cost data is added
+	print("DEBUG: Always calling _optimize_transport to ensure cost data")
+	text4 = _optimize_transport(text3, group_size, budget_currency)
 
 	# Parse the final result and ensure enhancements are included
 	try:
