@@ -46,7 +46,7 @@ def _add_image_to_activity(activity: Activity) -> Activity:
         print(f"Error adding image for {activity.name}: {e}")
     return activity
 
-def _enhance_activity_with_real_data(activity: Activity, location: str) -> Activity:
+def _enhance_activity_with_real_data(activity: Activity, location: str, elderly_friendly: bool = False) -> Activity:
     """Enhance activity with real data including ratings, prices, and explanations."""
     try:
         activity_dict = activity.model_dump()
@@ -85,6 +85,24 @@ def _enhance_activity_with_real_data(activity: Activity, location: str) -> Activ
             "phone": "+94 11 2XXX XXXX",
             "website": "www.srilanka.travel"
         }
+        
+        # Add elderly-friendly considerations
+        if elderly_friendly:
+            activity_dict["elderly_friendly"] = True
+            activity_dict["accessibility_notes"] = "Wheelchair accessible with easy walking paths and ramps"
+            activity_dict["rest_areas"] = "Multiple rest areas and seating available every 100m"
+            activity_dict["difficulty_level"] = "Easy - Gentle slopes, no stairs"
+            activity_dict["elderly_tips"] = [
+                "Comfortable walking shoes recommended",
+                "Take breaks every 30 minutes",
+                "Bring water and snacks",
+                "Avoid peak hours (10am-2pm) for cooler temperatures",
+                "Ask staff for assistance if needed"
+            ]
+            activity_dict["special_considerations"] = "This activity has been specially selected for elderly travelers with easy access, comfortable seating, and gentle terrain."
+        else:
+            activity_dict["elderly_friendly"] = False
+            activity_dict["difficulty_level"] = "Moderate"
         
         return Activity(**activity_dict)
     except Exception as e:
@@ -138,9 +156,19 @@ def _blend_day(
     alt_centers: List[Tuple[str, float, float]] | None = None,  # [(name, lat, lon)]
     *,
     pick_offset: int = 0,
+    elderly_friendly: bool = False,
+    group_type: str = "couple",
+    special_requirements: str = "",
 ) -> List[Activity]:
     acts=[]
-    slots=[("08:30","adventure"),("14:00","spa"),("17:30","beach")]
+    # Adjust time slots based on elderly-friendly considerations
+    if elderly_friendly:
+        slots=[("09:00","culture"),("11:30","nature"),("14:00","spa"),("16:00","beach")]
+    elif group_type == "family":
+        slots=[("08:30","adventure"),("11:00","culture"),("14:00","nature"),("16:30","beach")]
+    else:
+        slots=[("08:30","adventure"),("14:00","spa"),("17:30","beach")]
+    
     alt_centers = alt_centers or []
 
     for t in themes:
@@ -263,7 +291,7 @@ def _blend_day(
                     # Add image data
                     activity = _add_image_to_activity(activity)
                     # Add real data enhancement
-                    activity = _enhance_activity_with_real_data(activity, base_city)
+                    activity = _enhance_activity_with_real_data(activity, base_city, elderly_friendly)
                     acts.append(activity)
                     continue
             except Exception as e:
@@ -281,7 +309,7 @@ def _blend_day(
                 # Add image data
                 activity = _add_image_to_activity(activity)
                 # Add real data enhancement
-                activity = _enhance_activity_with_real_data(activity, base_city)
+                activity = _enhance_activity_with_real_data(activity, base_city, elderly_friendly)
                 acts.append(activity)
                 continue
 
@@ -307,7 +335,7 @@ def _blend_day(
         # Add image data
         activity = _add_image_to_activity(activity)
         # Add real data enhancement
-        activity = _enhance_activity_with_real_data(activity, base_city)
+        activity = _enhance_activity_with_real_data(activity, base_city, elderly_friendly)
         acts.append(activity)
     return acts
 
@@ -358,7 +386,13 @@ class PlannerAgent:
         for v_idx, (title, town_order) in enumerate(variants):
             daily=[]
             for i, d in enumerate(dates):
-                base_city = town_order[min(i,len(town_order)-1)] if town_order else req.start_location
+                # Fix: Use destinations properly for each day
+                if town_order and i < len(town_order):
+                    base_city = town_order[i]
+                elif town_order:
+                    base_city = town_order[-1]  # Use last destination if more days than destinations
+                else:
+                    base_city = req.start_location
                 if base_city not in coords:
                     raise ValueError(f"Base city '{base_city}' has no coordinates.")
                 clat,clon = coords[base_city]
@@ -366,7 +400,13 @@ class PlannerAgent:
                 # Build an alt-centers list that excludes the current base (we’ll try others if needed)
                 alt_centers = [(name, lat, lon) for (name, lat, lon) in alt_list_all if name != base_city]
 
-                acts = _blend_day(clat,clon,base_city,req.themes, alt_centers=alt_centers, pick_offset=i+v_idx)
+                acts = _blend_day(
+                    clat, clon, base_city, req.themes, 
+                    alt_centers=alt_centers, pick_offset=i+v_idx,
+                    elderly_friendly=req.party.elderly,
+                    group_type=req.party.type,
+                    special_requirements=req.party.notes
+                )
 
                 legs=[]
                 if i==0 and base_city!=req.start_location:

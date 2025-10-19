@@ -12,6 +12,7 @@ from pydantic.config import ConfigDict
 class Party(BaseModel):
     type: Literal["solo", "couple", "family", "friends"]
     count: conint(ge=1) = 1
+    elderly: bool = False
     notes: str = ""
 
     class Config:
@@ -104,8 +105,20 @@ class Activity(BaseModel):
     opening_hours: Optional[str] = None
     contact_info: Optional[Dict[str, str]] = None
     explanation: Optional[str] = None  # Explainable AI
+    
+    # Enhanced AI features
+    ai_reasoning: Optional[str] = None
+    elderly_friendly: Optional[bool] = None
+    estimated_duration: Optional[str] = None
+    best_time: Optional[str] = None
+    cost_range: Optional[str] = None
+    difficulty_level: Optional[str] = None
+    accessibility_notes: Optional[str] = None
+    rest_areas: Optional[str] = None
+    elderly_tips: Optional[List[str]] = None
+    special_considerations: Optional[str] = None
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 
 class TravelLeg(BaseModel):
@@ -126,8 +139,16 @@ class TravelLeg(BaseModel):
     
     # Explainable AI
     explanation: Optional[str] = None
+    
+    # Enhanced transport features
+    scenic_rating: Optional[int] = None
+    comfort_level: Optional[str] = None
+    elderly_friendly: Optional[bool] = None
+    booking_info: Optional[str] = None
+    special_notes: Optional[str] = None
+    cost_per_person: Optional[int] = None
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 
 class DayPlan(BaseModel):

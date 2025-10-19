@@ -2,7 +2,7 @@ import json, requests
 from typing import List, Tuple, Dict, Any
 from settings import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE
 
-CONTROLLED = ["beach","spa","adventure","culture","nature","food","wellness","wildlife","photography","mixed_highlights"]
+CONTROLLED = ["beach","spa","adventure","culture","nature","food","wellness","wildlife","photography","mixed_highlights","romantic","family","budget","luxury","elderly_friendly"]
 
 def _call_gemini_normalize(raws: List[str]) -> List[str]:
     if not GEMINI_API_KEY:
@@ -89,6 +89,26 @@ def normalize_themes(themes_raw: List[str], free_text_interest: str|None) -> Lis
         # Wellness and relaxation
         if any(k in text for k in ["spa", "massage", "yoga", "meditation", "relax", "wellness", "healing", "retreat"]):
             fallback.append("wellness")
+        
+        # Romantic and couple activities
+        if any(k in text for k in ["romantic", "couple", "honeymoon", "anniversary", "valentine", "love", "partner"]):
+            fallback.append("romantic")
+        
+        # Family-friendly activities
+        if any(k in text for k in ["family", "kids", "children", "child", "family-friendly", "parent"]):
+            fallback.append("family")
+        
+        # Budget considerations
+        if any(k in text for k in ["budget", "cheap", "affordable", "backpack", "low cost", "economical"]):
+            fallback.append("budget")
+        
+        # Luxury experiences
+        if any(k in text for k in ["luxury", "premium", "high-end", "exclusive", "vip", "deluxe", "5 star"]):
+            fallback.append("luxury")
+        
+        # Elderly-friendly considerations
+        if any(k in text for k in ["elderly", "senior", "old", "aged", "wheelchair", "accessible", "easy", "comfortable"]):
+            fallback.append("elderly_friendly")
         
         # Mixed experiences
         if any(k in text for k in ["everything", "all", "mixed", "variety", "diverse", "comprehensive", "complete"]):
@@ -186,15 +206,20 @@ def _fallback_place_suggestions(interests: List[str]) -> List[str]:
     Fallback place suggestions based on interests without LLM.
     """
     place_mapping = {
-        "beach": ["Mirissa", "Bentota", "Unawatuna", "Arugam Bay"],
-        "culture": ["Kandy", "Anuradhapura", "Polonnaruwa", "Galle Fort"],
-        "nature": ["Ella", "Nuwara Eliya", "Horton Plains", "Adam's Peak"],
-        "wildlife": ["Yala National Park", "Udawalawe", "Wilpattu", "Sinharaja"],
-        "adventure": ["Ella", "Adam's Peak", "Little Adam's Peak", "Nine Arch Bridge"],
-        "food": ["Colombo", "Kandy", "Galle", "Negombo"],
-        "wellness": ["Kandy", "Ella", "Nuwara Eliya", "Bentota"],
-        "photography": ["Sigiriya", "Ella", "Galle Fort", "Mirissa"],
-        "spa": ["Bentota", "Negombo", "Colombo", "Galle"]
+        "beach": ["Mirissa", "Bentota", "Unawatuna", "Arugam Bay", "Hikkaduwa"],
+        "culture": ["Kandy", "Anuradhapura", "Polonnaruwa", "Galle Fort", "Dambulla"],
+        "nature": ["Ella", "Nuwara Eliya", "Horton Plains", "Adam's Peak", "Sinharaja"],
+        "wildlife": ["Yala National Park", "Udawalawe", "Wilpattu", "Sinharaja", "Minneriya"],
+        "adventure": ["Ella", "Adam's Peak", "Little Adam's Peak", "Nine Arch Bridge", "Horton Plains"],
+        "food": ["Colombo", "Kandy", "Galle", "Negombo", "Jaffna"],
+        "wellness": ["Kandy", "Ella", "Nuwara Eliya", "Bentota", "Kandy"],
+        "photography": ["Sigiriya", "Ella", "Galle Fort", "Mirissa", "Nuwara Eliya"],
+        "spa": ["Bentota", "Negombo", "Colombo", "Galle", "Kandy"],
+        "romantic": ["Ella", "Mirissa", "Galle Fort", "Nuwara Eliya", "Bentota"],
+        "family": ["Colombo", "Kandy", "Galle", "Nuwara Eliya", "Bentota"],
+        "budget": ["Ella", "Kandy", "Galle", "Colombo", "Negombo"],
+        "luxury": ["Bentota", "Galle", "Colombo", "Kandy", "Nuwara Eliya"],
+        "elderly_friendly": ["Kandy", "Colombo", "Galle", "Nuwara Eliya", "Bentota"]
     }
     
     suggested_places = []

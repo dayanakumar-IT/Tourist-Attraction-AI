@@ -69,6 +69,7 @@ async def generate_itinerary(trip_data: dict):
             party={
                 "type": trip_data.get("party", {}).get("type", trip_data.get("traveler_profile", {}).get("group_type", "couple")),
                 "count": trip_data.get("party", {}).get("count", trip_data.get("traveler_profile", {}).get("group_size", 2)),
+                "elderly": trip_data.get("party", {}).get("elderly", False),
                 "notes": trip_data.get("party", {}).get("notes", trip_data.get("traveler_profile", {}).get("special_requirements", ""))
             },
             budget={
