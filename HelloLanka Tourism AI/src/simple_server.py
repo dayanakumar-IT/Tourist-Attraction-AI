@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import sys
 import os
 sys.path.append('src')
-from agents.enhanced_planner_agent import EnhancedPlannerAgent
+from agents.fallback_planner_agent import FallbackPlannerAgent
 from agents.enhanced_transport_agent import EnhancedTransportAgent
 from agents.weather_food_agent import WeatherFoodAgent
 from agents.accommodation_agent import AccommodationAgent
@@ -99,11 +99,11 @@ async def generate_itinerary(trip_data: dict):
         print(f"DEBUG: normalized.party: {normalized.party}")
         print(f"DEBUG: normalized.party.elderly: {normalized.party.elderly}")
         try:
-            planner = EnhancedPlannerAgent()
+            planner = FallbackPlannerAgent()
             plans = planner.plan(normalized)
-            print(f"✅ Generated {len(plans)} plans with LLM-powered place selection")
+            print(f"✅ Generated {len(plans)} plans with fallback place selection (no API required)")
         except Exception as e:
-            print(f"DEBUG: Error in enhanced planner agent: {e}")
+            print(f"DEBUG: Error in fallback planner agent: {e}")
             import traceback
             traceback.print_exc()
             raise
