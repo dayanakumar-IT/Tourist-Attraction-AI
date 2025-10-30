@@ -3,6 +3,7 @@ from typing import List, Dict, Tuple, Any
 from contracts import TripNormalized, Itinerary, DayPlan, Activity, TravelLeg, BudgetSummary
 from tools.sri_lanka_coordinates import get_coordinates, calculate_distance, get_travel_time
 from tools.sri_lanka_places import get_real_sri_lanka_places
+from tools.unsplash_images import get_sri_lanka_place_image
 
 class FallbackPlannerAgent:
     """
@@ -51,7 +52,7 @@ class FallbackPlannerAgent:
     
     def plan(self, req: TripNormalized) -> List[Itinerary]:
         """Create itineraries using fallback data."""
-        print(f"🔄 Using fallback planner for: {req.start_location} → {req.destinations}")
+        print(f"Using fallback planner for: {req.start_location} -> {req.destinations}")
         
         # Plan route through destinations
         route_plan = self._plan_multi_destination_route(req)
@@ -198,6 +199,22 @@ class FallbackPlannerAgent:
                 "explanation": f"Selected because: {place.get('reason', 'Matches your interests')}",
                 "difficulty_level": "Easy" if place.get("elderly_friendly", False) else "Moderate"
             })
+            
+            # Add image data
+            try:
+                image_data = get_sri_lanka_place_image(place["name"])
+                if image_data:
+                    activity_dict.update({
+                        "image_url": image_data["url"],
+                        "image_alt": image_data["alt"],
+                        "photographer": image_data["photographer"],
+                        "photographer_url": image_data["photographer_url"]
+                    })
+                    print(f"Added image for {place['name']}: {image_data['url']}")
+                else:
+                    print(f"No image found for {place['name']}")
+            except Exception as e:
+                print(f"Error fetching image for {place['name']}: {e}")
             
             activities.append(Activity(**activity_dict))
         
