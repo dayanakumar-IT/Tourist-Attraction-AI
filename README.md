@@ -1,29 +1,34 @@
 # Tourism AI – Multi-Agent Travel Optimization System 🌍✈️
 
-An intelligent multi-agent AI system built with **Gemini LLM API** and the **AutoGen framework**, designed to make travel planning smarter, safer, and more personalized.
+An intelligent multi-agent AI system built with **Gemini LLM API** and the **LangGraph + LangChain framework**, designed to make travel planning smarter, safer, and more personalized.
 
 ---
 
 ## 🌟 Overview  
 
-Tourism AI is your **next-gen travel companion**.  
+HelloLanka is your **next-gen travel companion**.  
 Instead of scrolling through dozens of blogs, reviews, and apps, this system uses **specialized AI agents** that collaborate to design **personalized itineraries**—optimizing attractions, budgets, safety, inclusivity, and accessibility.  
 
 Whether you're a family planning a vacation, a solo traveler, or a travel agency offering tailored packages, Tourism AI provides **efficient, reliable, and transparent travel solutions**.  
 ---
 
-## 🤖 Agents in Action  
+## 🤖 Agents in Action
 
-We built multiple specialized agents that work together to optimize the final output:
+We built multiple specialized agents that work together to produce a smart, Sri Lanka–aware itinerary:
 
-- 🗺️ **Attraction Finder Agent** → Suggests the best places to visit based on interests.  
-- ⭐ **Rating Analyzer Agent** → Analyzes reviews & ratings to filter quality experiences.  
-- 💰 **Budget Optimizer Agent** → Balances trip costs with traveler budget.  
-- 🚗 **Route Planning/Optimization Agent** → Finds the best travel routes, saving time & energy.  
-- 🛡️ **Safety & Policy Explainability Agent** → Ensures safety regulations, travel advisories, and provides transparent recommendations.  
-- 🚨 **Scam Watcher Agent** → Detects suspicious deals or scams to protect travelers.  
-- ♿ **Accessibility & Inclusivity Agent** → Suggests traveler-friendly options for elderly, differently-abled, or children.  
-- 🏨 **Accommodation & Stay Optimizer Agent** → Recommends stays based on budget, comfort, and location.  
+🧭**Pre-Agent (pre_agent.py)** → Understands free-text interests, normalizes them to themes (e.g., beach, culture), and infers traveler profile.
+
+🗺️ **Planner Agent (planner_agent.py)** → Geocodes places, picks POIs, sequences days, and generates 1–3 draft itineraries.
+
+🌤️**Weather & Food Agent (weather_food_agent.py)** → Adds realistic weather hints, best-time-to-visit, and nearby restaurants from Google Places.
+
+☔ **Weather-Aware Planner (weather_aware_planner.py)** → Adapts plans to weather (e.g., swap beaches on rainy days to museums/spa).
+
+🚗 **Transport Agent (transport_agent.py)** → Optimizes travel legs between activities, estimates duration, distance, and cost (LKR).
+
+🚆 **Train Booking Agent (train_booking_agent.py)** → Injects scenic Sri Lanka Railways options (Kandy ↔ Ella, Colombo ↔ Galle, etc.) with tips and class info.
+
+🧭**Cultural Tips Agent (cultural_tips_agent.py)** → Adds dress code, etiquette, timing, and safety reminders tailored to activity and location.
 
 ---
 
@@ -49,52 +54,22 @@ Tourism AI can transform how the travel industry operates:
 
 ---
 
-## 🖥️ Demo Flow  
-
-**Input Prompt:** 
-destination: Kandy
-duration: 5 days
-people:
-  - name: Person A
-    preference: Cultural & historical attractions
-  - name: Person B
-    preference: Shopping and food experiences
-  - name: Person C
-    preference: Adventure sports & hikes
-  - name: Person D
-    preference: Senior citizen, comfort and accessibility
-budget: $1000
-accommodation: Budget-friendly but safe
-requirements:
-  - Follow safety policies
-  - Avoid scams
-  - Optimize routes
-  - Balance costs
-  - Suggest inclusive attractions with best ratings
-
-
----
-
 ## 🔮 Future Scope  
 
-- Real-time **weather-based adjustments**  
 - Integration with **Google Maps & Booking APIs**  
 - Dynamic **group conflict resolution** (e.g., mixing adventure + relaxation in a single day)  
 - **Mobile app & chatbot** interfaces  
-
+- 🧩 Personalized AI Chat Companion: Chatbot-style guide (web + mobile) to answer travel questions and adjust itineraries on the go.
+- Smart Budget Prediction & Currency Conversion: AI forecasts real-time prices and suggests budget-friendly swaps using live exchange rates.
+- AI Photography & Memory Journal: Uses generative AI to create visual travel logs, auto-tag photos, and suggest captions.
+  
 ---
 
 ## 🏆 Tech Stack  
 
 - **LLM:** Gemini API  
-- **Framework:** AutoGen (multi-agent orchestration)  
+- **Framework:** LangChain & LangGraph
 - **Language:** Python  
 - **Environment:** Virtualenv
-  
----
-
-## System Diagram
-
-<img width="758" height="1762" alt="diagram-export-9-28-2025-2_14_56-PM" src="https://github.com/user-attachments/assets/adb35a96-c4b7-43b3-af15-c6e3178e9d1a" />
-
-- **Deployment-ready:** Can be scaled via Docker / Cloud (future scope)  
+- **Backend Framework:** FastAPI
+- **Frontend:** React
